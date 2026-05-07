@@ -1,5 +1,9 @@
 # SK Agent 工作台
 
+新手先看：
+
+- [SK Agent 工作台保姆级说明书](docs/beginner-manual.md)
+
 本项目是本地优先的 SK 仓库 Agent 工作台。当前只实现第 0 期和第 1 期，核心验证一句话：
 
 > SK Agent 能稳定读取 SK 仓库当前文件，并明确本次读到了什么。
