@@ -118,8 +118,27 @@ type PatchDraftResponse = {
   detail?: string;
 };
 
-type TabKey = "home" | "files" | "search" | "audit" | "agents" | "patch";
+type GraphStatusResponse = {
+  status: string;
+  node_count?: number;
+  relationship_count?: number;
+  labels?: Array<{ label: string; count: number }> | Record<string, number>;
+  relationship_types?: Array<{ type: string; count: number }> | Record<string, number>;
+  source_chunk_count?: number;
+  detail?: string;
+};
+
+type GraphQueryResponse = {
+  status: string;
+  query: string;
+  count: number;
+  results: Array<Record<string, unknown>>;
+  detail?: string;
+};
+
+type TabKey = "home" | "files" | "search" | "audit" | "agents" | "patch" | "graph";
 type AgentMode = "product-teardown" | "framework-red-team" | "article-publish-check";
+type GraphQueryKind = "fm015" | "framework" | "tools" | "theories";
 
 const tabs: Array<{ key: TabKey; label: string }> = [
   { key: "home", label: "状态" },
@@ -128,6 +147,7 @@ const tabs: Array<{ key: TabKey; label: string }> = [
   { key: "audit", label: "审计" },
   { key: "agents", label: "Agent" },
   { key: "patch", label: "入库稿" },
+  { key: "graph", label: "图谱" },
 ];
 
 const canonicalPaths = [
@@ -195,6 +215,10 @@ export default function Home() {
   const [patchIntent, setPatchIntent] = useState("新增轻量初拆文档");
   const [patchContent, setPatchContent] = useState("# Example\n\n正文内容");
   const [patchResult, setPatchResult] = useState<PatchDraftResponse | null>(null);
+  const [graphStatus, setGraphStatus] = useState<GraphStatusResponse | null>(null);
+  const [graphQueryKind, setGraphQueryKind] = useState<GraphQueryKind>("fm015");
+  const [graphQuery, setGraphQuery] = useState("FM015");
+  const [graphResult, setGraphResult] = useState<GraphQueryResponse | null>(null);
   const [busy, setBusy] = useState<string>("");
   const [error, setError] = useState<string>("");
 
@@ -308,6 +332,35 @@ export default function Home() {
     if (result) setPatchResult(result);
   }
 
+  async function refreshGraphStatus() {
+    const result = await run("读取图谱状态", () => fetchJson<GraphStatusResponse>("/graph/status"));
+    if (result) setGraphStatus(result);
+  }
+
+  async function rebuildGraph() {
+    const result = await run("重建图谱", () =>
+      fetchJson<GraphStatusResponse>("/graph/rebuild", {
+        method: "POST",
+        body: "{}",
+      }),
+    );
+    if (result) setGraphStatus(result);
+  }
+
+  async function runGraphQuery(event?: FormEvent) {
+    event?.preventDefault();
+    const endpoint =
+      graphQueryKind === "fm015"
+        ? `/graph/failure-modes/${encodeURIComponent(graphQuery || "FM015")}/cases`
+        : graphQueryKind === "framework"
+          ? `/graph/frameworks/articles?framework=${encodeURIComponent(graphQuery || "诊断空白")}`
+          : graphQueryKind === "tools"
+            ? "/graph/products/tools"
+            : "/graph/theories/reused";
+    const result = await run("查询图谱", () => fetchJson<GraphQueryResponse>(endpoint));
+    if (result) setGraphResult(result);
+  }
+
   return (
     <main className="min-h-screen bg-panel text-ink">
       <header className="border-b border-line bg-white">
@@ -404,6 +457,19 @@ export default function Home() {
             setContent={setPatchContent}
             result={patchResult}
             runPatch={runPatch}
+          />
+        )}
+        {activeTab === "graph" && (
+          <GraphView
+            status={graphStatus}
+            queryKind={graphQueryKind}
+            setQueryKind={setGraphQueryKind}
+            query={graphQuery}
+            setQuery={setGraphQuery}
+            result={graphResult}
+            refreshStatus={refreshGraphStatus}
+            rebuildGraph={rebuildGraph}
+            runQuery={runGraphQuery}
           />
         )}
       </div>
@@ -742,6 +808,91 @@ function PatchView({
           ]}
         />
         <pre className="code-block mt-3 min-h-80">{result?.diff_preview || result?.detail || "尚未生成入库稿。"}</pre>
+      </section>
+    </div>
+  );
+}
+
+function GraphView({
+  status,
+  queryKind,
+  setQueryKind,
+  query,
+  setQuery,
+  result,
+  refreshStatus,
+  rebuildGraph,
+  runQuery,
+}: {
+  status: GraphStatusResponse | null;
+  queryKind: GraphQueryKind;
+  setQueryKind: (value: GraphQueryKind) => void;
+  query: string;
+  setQuery: (value: string) => void;
+  result: GraphQueryResponse | null;
+  refreshStatus: () => Promise<void>;
+  rebuildGraph: () => Promise<void>;
+  runQuery: (event?: FormEvent) => Promise<void>;
+}) {
+  const needsInput = queryKind === "fm015" || queryKind === "framework";
+  const placeholder = queryKind === "fm015" ? "FM015" : "诊断空白";
+  return (
+    <div className="grid gap-5 lg:grid-cols-[420px_1fr]">
+      <section>
+        <div className="mb-4 grid grid-cols-2 gap-2">
+          <button className="secondary-button" type="button" onClick={refreshStatus}>
+            图谱状态
+          </button>
+          <button className="primary-button" type="button" onClick={rebuildGraph}>
+            重建图谱
+          </button>
+        </div>
+        <KeyValue
+          rows={[
+            ["状态", status?.status],
+            ["chunk", status?.source_chunk_count],
+            ["节点", status?.node_count],
+            ["关系", status?.relationship_count],
+            ["节点类型", status?.labels],
+            ["关系类型", status?.relationship_types],
+          ]}
+        />
+        <form className="space-y-3" onSubmit={runQuery}>
+          <label className="block text-sm font-medium">验收查询</label>
+          <select
+            className="field"
+            value={queryKind}
+            onChange={(event) => {
+              const next = event.target.value as GraphQueryKind;
+              setQueryKind(next);
+              if (next === "fm015") setQuery("FM015");
+              if (next === "framework") setQuery("诊断空白");
+            }}
+          >
+            <option value="fm015">哪些案例命中 FM015？</option>
+            <option value="framework">诊断空白框架出现在哪些文章？</option>
+            <option value="tools">哪些产品被判为“工具”？</option>
+            <option value="theories">哪些理论被多个案例引用？</option>
+          </select>
+          {needsInput && (
+            <input
+              className="field"
+              value={query}
+              placeholder={placeholder}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          )}
+          <button className="primary-button w-full" type="submit">
+            查询图谱
+          </button>
+        </form>
+      </section>
+      <section className="min-w-0">
+        <ResultHeader title={result?.query || "图谱查询结果"} status={result?.status} />
+        <KeyValue rows={[["结果数", result?.count]]} />
+        <pre className="code-block min-h-[520px]">
+          {result ? JSON.stringify(result.results, null, 2) : "尚未查询图谱。"}
+        </pre>
       </section>
     </div>
   );
