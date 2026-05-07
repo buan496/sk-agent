@@ -28,6 +28,9 @@ class Settings:
     minimax_chat_model: str = "MiniMax-M2.7"
     minimax_chat_endpoint: str = "/chat/completions"
     minimax_temperature: float = 0.2
+    neo4j_uri: str = "bolt://neo4j:7687"
+    neo4j_user: str = "neo4j"
+    neo4j_password: str = "sk_agent_neo4j"
 
 
 @lru_cache(maxsize=1)
@@ -56,6 +59,11 @@ def get_settings() -> Settings:
         ).strip()
         or "/chat/completions",
         minimax_temperature=float(os.getenv("MINIMAX_TEMPERATURE", "0.2")),
+        neo4j_uri=os.getenv("NEO4J_URI", "bolt://neo4j:7687").strip()
+        or "bolt://neo4j:7687",
+        neo4j_user=os.getenv("NEO4J_USER", "neo4j").strip() or "neo4j",
+        neo4j_password=os.getenv("NEO4J_PASSWORD", "sk_agent_neo4j").strip()
+        or "sk_agent_neo4j",
     )
 
 

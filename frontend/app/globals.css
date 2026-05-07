@@ -23,3 +23,40 @@ body {
     "Segoe UI",
     sans-serif;
 }
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+textarea {
+  resize: vertical;
+}
+
+@layer components {
+  .primary-button {
+    @apply h-10 rounded-md border border-accent bg-accent px-4 text-sm font-medium text-white hover:bg-[#0f5f51];
+  }
+
+  .secondary-button {
+    @apply h-10 rounded-md border border-line bg-white px-4 text-sm font-medium text-slate-700 hover:border-accent;
+  }
+
+  .field {
+    @apply w-full rounded-md border border-line bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-emerald-100;
+  }
+
+  .code-block {
+    @apply w-full overflow-auto rounded-md border border-line bg-white p-4 text-sm leading-6 text-slate-800;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+}

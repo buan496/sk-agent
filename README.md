@@ -327,9 +327,128 @@ cases/2026/case-cards.md
 Cursor/Codex 执行指令
 ```
 
+## 入库稿 API
+
+第 5 期提供只生成草稿、不写仓库的入库稿接口：
+
+```text
+POST /patch/draft
+```
+
+示例：
+
+```powershell
+$body = @{
+  target_file = "cases/2026/example.md"
+  intent = "新增轻量初拆文档"
+  new_content = "# Example`n`n正文内容"
+  operation = "auto"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method Post http://localhost:8000/patch/draft -ContentType "application/json" -Body $body
+```
+
+接口会先读取目标文件，返回已读取文件、建议保存路径、Markdown 正文、diff 预览、commit message、PR title、PR body 和风险提示。`operation=auto` 时，目标文件本次读取成功则生成追加草稿，未读取到则生成新增文件草稿。
+
+## SK 专用 Agent API
+
+第 6 期提供三个工作流接口：
+
+```text
+POST /agents/product-teardown
+POST /agents/framework-red-team
+POST /agents/article-publish-check
+```
+
+产品轻量初拆：
+
+```powershell
+$body = @{
+  product_name = "Example Product"
+  notes = "可选补充信息"
+  limit = 8
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method Post http://localhost:8000/agents/product-teardown -ContentType "application/json" -Body $body
+```
+
+框架红队：
+
+```powershell
+$body = @{
+  idea = "一个 AI 产品方向"
+  notes = "可选补充信息"
+  limit = 8
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method Post http://localhost:8000/agents/framework-red-team -ContentType "application/json" -Body $body
+```
+
+文章发布检查：
+
+```powershell
+$body = @{
+  final_article = "# 标题`n`n文章终稿正文"
+  notes = "可选补充信息"
+  limit = 8
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method Post http://localhost:8000/agents/article-publish-check -ContentType "application/json" -Body $body
+```
+
+这些接口都会返回 `read_files`。MiniMax 可用时返回模型生成结果；MiniMax 不可用时返回规则版骨架，并在 `llm.status` 标记为 `unavailable`。
+
+## 前端工作台
+
+第 7 期把主要后端能力接入到首页工作台：
+
+```text
+http://localhost:3000
+```
+
+当前页面包含：
+
+- 状态：查看 backend、canonical 文件读取、运行状态审计
+- 文件：读取文件树并预览文件正文
+- 检索：运行 `/search` 和 `/ask`
+- 审计：查看状态漂移结果
+- Agent：运行产品轻量初拆、框架红队、文章发布检查
+- 入库稿：调用 `/patch/draft` 查看草稿和 diff preview
+
+## 图数据库 API
+
+第 8 期接入 Neo4j，并从 PostgreSQL 索引 chunks 重建基础图谱：
+
+```text
+POST /graph/rebuild
+GET /graph/status
+GET /graph/failure-modes/{code}/cases
+GET /graph/frameworks/articles?framework=诊断空白
+GET /graph/products/tools
+GET /graph/theories/reused?min_cases=2
+```
+
+启动 Neo4j 与后端：
+
+```powershell
+docker compose up -d --build backend
+```
+
+重建图谱：
+
+```powershell
+Invoke-RestMethod -Method Post http://localhost:8000/graph/rebuild
+Invoke-RestMethod http://localhost:8000/graph/status
+```
+
+Neo4j Browser：
+
+```text
+http://localhost:7474
+```
+
 ## 当前不做
 
-- 不做 Neo4j
 - 不做自动 GitHub 写入
 - 不做复杂 LLM Agent
 - 不做 pgvector 语义检索

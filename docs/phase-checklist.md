@@ -150,3 +150,124 @@
 - [x] `/search` 可检索 `case-card 格式在哪里`
 - [x] `/search` 可检索 `产品评估决策清单有哪些必须条件`
 - [x] `/ask` 可调用 MiniMax 并返回引用
+
+## 第 5 期：GitHub 入库稿生成器
+
+状态：完成本地草稿版。
+
+- [x] 新增 `backend/app/services/patch_writer.py`
+- [x] 输入支持目标文件、修改意图、新增内容
+- [x] 支持 `auto`、`create`、`append`、`replace` 草稿模式
+- [x] 输出建议保存路径
+- [x] 输出 Markdown 正文
+- [x] 输出 diff 说明和 diff preview
+- [x] 输出 commit message
+- [x] 输出 PR title
+- [x] 输出 PR body
+- [x] API：`POST /patch/draft`
+- [x] 草稿生成前先读取目标文件
+- [x] 目标文件未读取到时只提示“本次未读取到”，不判断文件不存在
+- [x] 不写本地 SK 仓库
+- [x] 不调用 GitHub 写入 API
+
+验收：
+
+- [x] 后端 Docker 测试通过：`22 passed`
+- [x] 可生成新增轻量初拆文档草稿
+- [x] 可生成更新执行状态总表草稿
+- [x] 可生成更新 case-cards 草稿
+- [x] 可生成写入清单草稿
+
+## 第 6 期：SK 专用 Agent
+
+状态：完成后端第一版。
+
+- [x] Agent 1：产品轻量初拆
+- [x] 产品轻量初拆会先运行状态校准
+- [x] 产品轻量初拆会搜索仓库是否已有相关内容
+- [x] 产品轻量初拆会读取轻量初拆模板候选文件
+- [x] 产品轻量初拆会输出是否建议入库或先排重
+- [x] Agent 2：框架红队
+- [x] 框架红队会读取项目审问清单候选文件
+- [x] 框架红队会读取产品评估决策清单候选文件
+- [x] 框架红队会读取 `core/failure_modes.yml`
+- [x] 框架红队会输出反向排雷和 Kill / Go / Hold 判断
+- [x] Agent 3：文章发布检查
+- [x] 文章发布检查会读取公众号写作指南候选文件
+- [x] 文章发布检查会读取内容生产经验手册候选文件
+- [x] 文章发布检查会读取发布 SOP 候选文件
+- [x] 文章发布检查会输出风险检查和发布包
+- [x] API：`POST /agents/product-teardown`
+- [x] API：`POST /agents/framework-red-team`
+- [x] API：`POST /agents/article-publish-check`
+- [x] MiniMax 不可用时返回规则版骨架，不阻塞流程
+- [x] 不写本地 SK 仓库
+- [x] 不调用 GitHub 写入 API
+
+验收：
+
+- [x] 后端 Docker 测试通过：`26 passed`
+
+## 第 7 期：前端工作台
+
+状态：完成第一版可用工作台。
+
+- [x] 首页：当前仓库状态
+- [x] 文件页：浏览 SK 文件
+- [x] 检索页：搜索知识库
+- [x] 检索页：运行 `/ask`
+- [x] 状态审计页：显示漂移结果
+- [x] Agent 页：运行 SK 专用 Agent
+- [x] 入库稿页：查看 patch 草稿
+- [x] 前端能读取 canonical 文件
+- [x] 前端能运行状态审计
+- [x] 前端能搜索 MTP / 诊断空白 / failure_modes
+- [x] 前端能查看入库稿
+- [x] 不写本地 SK 仓库
+- [x] 不调用 GitHub 写入 API
+
+验收：
+
+- [x] 前端 Docker 构建通过
+- [x] `docker compose run --rm frontend npm run build` 通过
+- [x] `http://localhost:3000` 返回 200
+
+## 第 8 期：图数据库
+
+状态：完成 Neo4j 第一版。
+
+- [x] Docker Compose 增加 Neo4j 5 Community
+- [x] 后端增加 Neo4j driver
+- [x] `.env.example` 增加 Neo4j 配置
+- [x] 实现 `backend/app/services/graph_builder.py`
+- [x] 从 PostgreSQL chunks 重建图谱
+- [x] 节点：`Product`
+- [x] 节点：`Case`
+- [x] 节点：`Article`
+- [x] 节点：`Framework`
+- [x] 节点：`FailureMode`
+- [x] 节点：`Theory`
+- [x] 节点：`File`
+- [x] 节点：`Decision`
+- [x] 节点：`Signal`
+- [x] 关系：`APPEARS_IN`
+- [x] 关系：`TRIGGERS`
+- [x] 关系：`USES`
+- [x] 关系：`REFERENCES`
+- [x] 关系：`HAS_DECISION`
+- [x] API：`POST /graph/rebuild`
+- [x] API：`GET /graph/status`
+- [x] API：`GET /graph/failure-modes/{code}/cases`
+- [x] API：`GET /graph/frameworks/articles?framework=`
+- [x] API：`GET /graph/products/tools`
+- [x] API：`GET /graph/theories/reused`
+
+验收：
+
+- [x] 后端单元测试通过：`28 passed`
+- [x] `/graph/rebuild` 成功：`source_chunk_count=3703 node_count=535 relationship_count=1358`
+- [x] `/graph/status` 成功
+- [x] 可查询：哪些案例命中 FM015
+- [x] 可查询：诊断空白框架出现在哪些文章
+- [x] 可查询：哪些产品被判为“工具”
+- [x] 可查询：哪些理论被多个案例引用

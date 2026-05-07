@@ -4,8 +4,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.agents import router as agents_router
+from app.api.graph import router as graph_router
 from app.api.index import router as index_router
 from app.api.llm import router as llm_router
+from app.api.patch import router as patch_router
 from app.api.repo import router as repo_router
 from app.api.search import router as search_router
 from app.config import get_settings
@@ -36,3 +38,5 @@ app.include_router(index_router)
 app.include_router(llm_router)
 app.include_router(search_router)
 app.include_router(agents_router)
+app.include_router(patch_router)
+app.include_router(graph_router)
