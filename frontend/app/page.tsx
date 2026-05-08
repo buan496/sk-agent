@@ -118,6 +118,17 @@ type PatchDraftResponse = {
   detail?: string;
 };
 
+type RepoSyncResponse = {
+  status: string;
+  action?: string;
+  repo?: string;
+  branch?: string;
+  target_path?: string;
+  commit?: string | null;
+  message?: string;
+  detail?: string;
+};
+
 type GraphStatusResponse = {
   status: string;
   node_count?: number;
@@ -207,6 +218,7 @@ export default function Home() {
   const [askQuestion, setAskQuestion] = useState("诊断空白四条件是什么");
   const [askResult, setAskResult] = useState<AskResponse | null>(null);
   const [auditResult, setAuditResult] = useState<StatusAuditResponse | null>(null);
+  const [syncResult, setSyncResult] = useState<RepoSyncResponse | null>(null);
   const [agentMode, setAgentMode] = useState<AgentMode>("product-teardown");
   const [agentInput, setAgentInput] = useState("Perplexity");
   const [agentNotes, setAgentNotes] = useState("");
@@ -297,6 +309,19 @@ export default function Home() {
       fetchJson<StatusAuditResponse>("/agents/status-audit", { method: "POST", body: "{}" }),
     );
     if (result) setAuditResult(result);
+  }
+
+  async function syncRepo() {
+    const result = await run("拉取 SK 仓库", () =>
+      fetchJson<RepoSyncResponse>("/repo/sync", {
+        method: "POST",
+        body: "{}",
+      }),
+    );
+    if (result) {
+      setSyncResult(result);
+      await refreshSnapshot();
+    }
   }
 
   async function runAgent(event: FormEvent) {
@@ -408,6 +433,8 @@ export default function Home() {
             canonical={canonical}
             canonicalByPath={canonicalByPath}
             refreshSnapshot={refreshSnapshot}
+            syncRepo={syncRepo}
+            syncResult={syncResult}
             runAudit={runAudit}
             auditResult={auditResult}
           />
@@ -500,12 +527,16 @@ function HomeView({
   canonical,
   canonicalByPath,
   refreshSnapshot,
+  syncRepo,
+  syncResult,
   runAudit,
   auditResult,
 }: {
   canonical: CanonicalResponse | null;
   canonicalByPath: Map<string | undefined, FileReadResult>;
   refreshSnapshot: () => Promise<void>;
+  syncRepo: () => Promise<void>;
+  syncResult: RepoSyncResponse | null;
   runAudit: () => Promise<void>;
   auditResult: StatusAuditResponse | null;
 }) {
@@ -516,11 +547,28 @@ function HomeView({
           <button className="primary-button" type="button" onClick={refreshSnapshot}>
             刷新 canonical
           </button>
+          <button className="secondary-button" type="button" onClick={syncRepo}>
+            手动拉取 SK 仓库
+          </button>
           <button className="secondary-button" type="button" onClick={runAudit}>
             运行状态审计
           </button>
         </div>
       </Section>
+      {syncResult && (
+        <Section title="最近同步">
+          <KeyValue
+            rows={[
+              ["状态", syncResult.status],
+              ["仓库", syncResult.repo],
+              ["分支", syncResult.branch],
+              ["commit", syncResult.commit],
+              ["缓存路径", syncResult.target_path],
+              ["说明", syncResult.message],
+            ]}
+          />
+        </Section>
+      )}
       <div className="overflow-hidden rounded-md border border-line bg-white">
         <table className="w-full border-collapse text-left text-sm">
           <thead className="border-b border-line bg-panel text-xs uppercase text-slate-500">
