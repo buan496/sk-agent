@@ -40,11 +40,13 @@ services:
         PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.12-slim}
     environment:
       PYTHONPATH: /app
-      LOCAL_REPO_PATH: ${LOCAL_REPO_PATH-/sk-repo}
+      LOCAL_REPO_PATH: ${LOCAL_REPO_PATH:-/repo-cache/SK}
       GITHUB_REPO: ${GITHUB_REPO:-}
       GITHUB_BRANCH: ${GITHUB_BRANCH:-main}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       GITHUB_RAW_BASE_URL: ${GITHUB_RAW_BASE_URL:-}
+      REPO_SYNC_URL: ${REPO_SYNC_URL:-https://github.com/MRYGP/SK.git}
+      REPO_SYNC_PATH: ${REPO_SYNC_PATH:-/repo-cache/SK}
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
       POSTGRES_DB: ${POSTGRES_DB:-sk_agent}
@@ -62,6 +64,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
+      - ./data/repo_cache:/repo-cache
       - ${SK_REPO_PATH:-./data/repo_cache}:/sk-repo:ro
     depends_on:
       db:
@@ -82,6 +85,26 @@ services:
     depends_on:
       - backend
 
+  n8n:
+    image: ${N8N_IMAGE:-n8nio/n8n:latest}
+    environment:
+      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE:-Asia/Shanghai}
+      TZ: ${GENERIC_TIMEZONE:-Asia/Shanghai}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:-change-me-local-only}
+      N8N_BASIC_AUTH_ACTIVE: ${N8N_BASIC_AUTH_ACTIVE:-true}
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER:-admin}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD:-sk_agent_n8n}
+      SK_AGENT_API_BASE_URL: http://backend:8000
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n/workflows:/workflows:ro
+    depends_on:
+      - backend
+
 volumes:
   postgres_data:
   neo4j_data:
+  n8n_data:

@@ -31,6 +31,8 @@ class Settings:
     neo4j_uri: str = "bolt://neo4j:7687"
     neo4j_user: str = "neo4j"
     neo4j_password: str = "sk_agent_neo4j"
+    repo_sync_url: str = "https://github.com/MRYGP/SK.git"
+    repo_sync_path: str = "/repo-cache/SK"
 
 
 @lru_cache(maxsize=1)
@@ -64,6 +66,13 @@ def get_settings() -> Settings:
         neo4j_user=os.getenv("NEO4J_USER", "neo4j").strip() or "neo4j",
         neo4j_password=os.getenv("NEO4J_PASSWORD", "sk_agent_neo4j").strip()
         or "sk_agent_neo4j",
+        repo_sync_url=os.getenv(
+            "REPO_SYNC_URL",
+            "https://github.com/MRYGP/SK.git",
+        ).strip()
+        or "https://github.com/MRYGP/SK.git",
+        repo_sync_path=os.getenv("REPO_SYNC_PATH", "/repo-cache/SK").strip()
+        or "/repo-cache/SK",
     )
 
 

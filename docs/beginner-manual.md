@@ -51,6 +51,7 @@ Neo4j     = 关系图谱仓库，存案例、理论、产品之间的关系
 MiniMax   = 大模型，负责生成自然语言答案
 Docker    = 打包和启动所有服务的工具
 GitHub    = 远程代码仓库
+n8n       = 自动化流水线，定时同步 SK 仓库并重建索引/图谱
 ```
 
 ---
@@ -565,6 +566,50 @@ cases/2026/case-cards.md
 重要规则：
 
 > 文件没读到，只能说“本次未读取到”，不能断言“文件不存在”。
+
+---
+
+## 15.1 n8n 自动同步是什么？
+
+n8n 是自动化工具。
+
+这次项目里给它做了一条流水线：
+
+```text
+从 GitHub 下载最新 SK 仓库
+↓
+重建 PostgreSQL 索引
+↓
+重建 Neo4j 图谱
+↓
+读取图谱状态
+```
+
+n8n 地址：
+
+```text
+http://localhost:5678
+```
+
+workflow 文件：
+
+```text
+n8n/workflows/sk-repo-sync.json
+```
+
+详细说明：
+
+```text
+docs/n8n-sk-sync.md
+```
+
+GitHub token 放在 `.env`：
+
+```env
+GITHUB_TOKEN=你的 token
+```
+
+不要把 token 发到聊天里，也不要提交到 GitHub。
 
 ---
 
@@ -1130,4 +1175,3 @@ Neo4j 图谱
 ```
 
 这就是整个 SK Agent 工作台。
-
