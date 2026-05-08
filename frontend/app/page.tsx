@@ -166,7 +166,108 @@ type GraphQueryResponse = {
   detail?: string;
 };
 
-type TabKey = "home" | "files" | "search" | "audit" | "agents" | "patch" | "graph";
+type MemoryRegistriesResponse = {
+  status: string;
+  internal_roles?: string;
+  agent_registry: string;
+  gpts_registry: string;
+  external_tools: string;
+  detail?: string;
+};
+
+type ExternalRun = {
+  id: number;
+  created_at: string;
+  agent_type: string;
+  agent_name: string;
+  task_type: string;
+  input_summary: string;
+  output_summary: string;
+  source_link_or_file?: string;
+  related_sk_files: string[];
+  status: string;
+  should_ingest: boolean;
+  ingested: boolean;
+  notes?: string;
+};
+
+type ExternalRunsResponse = {
+  status: string;
+  count: number;
+  runs: ExternalRun[];
+  detail?: string;
+};
+
+type ExternalRunForm = {
+  agent_type: string;
+  agent_name: string;
+  task_type: string;
+  input_summary: string;
+  output_summary: string;
+  source_link_or_file: string;
+  related_sk_files: string;
+  status: string;
+  should_ingest: boolean;
+  ingested: boolean;
+  notes: string;
+};
+
+type RoleInfo = {
+  role_id: string;
+  role_name: string;
+  purpose: string;
+};
+
+type RoleListResponse = {
+  status: string;
+  roles: RoleInfo[];
+};
+
+type RoleRunResponse = {
+  status: string;
+  role_id: string;
+  role_name: string;
+  task_type: string;
+  conclusion: string;
+  read_files: ReadFileSummary[];
+  risks: string[];
+  minimal_next_step: string;
+  answer_markdown: string;
+  human_readable_markdown?: string;
+  structured_output: Record<string, unknown>;
+  web_used?: boolean;
+  web_queries?: string[];
+  web_results_count?: number;
+  evidence_ledger?: unknown[];
+  missing_evidence?: unknown[];
+  warnings?: string[];
+  run_id?: number;
+};
+
+type InternalRoleRun = RoleRunResponse & {
+  id: number;
+  created_at: string;
+  input_summary: string;
+  should_ingest: boolean;
+  ingested: boolean;
+};
+
+type InternalRoleRunsResponse = {
+  status: string;
+  count: number;
+  runs: InternalRoleRun[];
+};
+
+type RoleRunForm = {
+  task_type: string;
+  input: string;
+  notes: string;
+  preferred_role: string;
+  allow_web: boolean;
+  web_queries: string;
+};
+
+type TabKey = "home" | "files" | "search" | "audit" | "agents" | "patch" | "graph" | "memory";
 type AgentMode = "product-teardown" | "framework-red-team" | "article-publish-check";
 type GraphQueryKind = "fm015" | "framework" | "tools" | "theories";
 
@@ -178,6 +279,7 @@ const tabs: Array<{ key: TabKey; label: string }> = [
   { key: "agents", label: "Agent" },
   { key: "patch", label: "入库稿" },
   { key: "graph", label: "图谱" },
+  { key: "memory", label: "内部角色" },
 ];
 
 const canonicalPaths = [
@@ -189,8 +291,27 @@ const canonicalPaths = [
 
 const quickSearches = ["MTP 构思招募法在哪", "诊断空白四条件是什么", "failure_modes", "产品评估决策清单"];
 
+const roleTaskLabels: Record<string, string> = {
+  deep_research: "深度研究：整理外部证据清单",
+  writing_workshop: "写作工坊：改文章结构和表达",
+  first_reader: "第一读者：从读者视角审稿",
+  product_teardown: "产品初拆：轻量初拆和排重",
+  repo_governance: "仓库治理：状态和边界判断",
+  patch_draft: "入库稿：生成可审核草稿",
+  status_audit: "状态审计：检查状态漂移",
+  article_publish_check: "发布检查：文章发布前检查",
+};
+
 function apiBaseUrl() {
-  return process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+  const configured = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (typeof window !== "undefined") {
+    const hostname = window.location.hostname;
+    const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1";
+    if (!configured || (!isLocalhost && configured.includes("localhost"))) {
+      return `${window.location.protocol}//${hostname}:8000`;
+    }
+  }
+  return configured ?? "http://localhost:8000";
 }
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -225,6 +346,28 @@ function compact(value: unknown) {
   return JSON.stringify(value, null, 2);
 }
 
+function bulletList(value: unknown, fallback = "-") {
+  if (!value) return fallback;
+  if (Array.isArray(value)) {
+    const lines = value
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object") {
+          const record = item as Record<string, unknown>;
+          const title = record.source_title || record.title || record.claim || "候选来源";
+          const url = record.source_url || record.url;
+          const sourceType = record.source_type || "unknown";
+          const level = record.evidence_level || "candidate";
+          return url ? `${title}（${sourceType}，${level}）\n${url}` : `${title}（${sourceType}，${level}）`;
+        }
+        return String(item);
+      })
+      .filter(Boolean);
+    return lines.length ? lines.map((line) => `- ${line}`).join("\n") : fallback;
+  }
+  return compact(value);
+}
+
 function formatShanghaiTime(value?: string | null) {
   if (!value) return "-";
   const date = new Date(value);
@@ -244,6 +387,8 @@ function formatShanghaiTime(value?: string | null) {
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabKey>("home");
   const [health, setHealth] = useState<"ok" | "offline">("offline");
+  const [apiDisplay, setApiDisplay] = useState("loading");
+  const [showIntro, setShowIntro] = useState(true);
   const [canonical, setCanonical] = useState<CanonicalResponse | null>(null);
   const [files, setFiles] = useState<FilesResponse | null>(null);
   const [selectedPath, setSelectedPath] = useState("README.md");
@@ -267,6 +412,32 @@ export default function Home() {
   const [graphQueryKind, setGraphQueryKind] = useState<GraphQueryKind>("fm015");
   const [graphQuery, setGraphQuery] = useState("FM015");
   const [graphResult, setGraphResult] = useState<GraphQueryResponse | null>(null);
+  const [memoryRegistries, setMemoryRegistries] = useState<MemoryRegistriesResponse | null>(null);
+  const [externalRuns, setExternalRuns] = useState<ExternalRunsResponse | null>(null);
+  const [externalRunForm, setExternalRunForm] = useState<ExternalRunForm>({
+    agent_type: "gpts",
+    agent_name: "深度研究员",
+    task_type: "external_research",
+    input_summary: "",
+    output_summary: "",
+    source_link_or_file: "",
+    related_sk_files: "",
+    status: "draft",
+    should_ingest: false,
+    ingested: false,
+    notes: "",
+  });
+  const [roleList, setRoleList] = useState<RoleListResponse | null>(null);
+  const [roleRuns, setRoleRuns] = useState<InternalRoleRunsResponse | null>(null);
+  const [roleResult, setRoleResult] = useState<RoleRunResponse | null>(null);
+  const [roleRunForm, setRoleRunForm] = useState<RoleRunForm>({
+    task_type: "deep_research",
+    input: "研究一个产品是否值得进入 SK。",
+    notes: "",
+    preferred_role: "",
+    allow_web: false,
+    web_queries: "",
+  });
   const [busy, setBusy] = useState<string>("");
   const [error, setError] = useState<string>("");
 
@@ -275,6 +446,7 @@ export default function Home() {
   }, [canonical]);
 
   useEffect(() => {
+    setApiDisplay(apiBaseUrl());
     void refreshSnapshot();
   }, []);
 
@@ -435,8 +607,73 @@ export default function Home() {
     if (result) setGraphResult(result);
   }
 
+  async function loadMemoryRegistries() {
+    const result = await run("读取多智能体分工", () => fetchJson<MemoryRegistriesResponse>("/memory/registries"));
+    if (result) setMemoryRegistries(result);
+  }
+
+  async function loadExternalRuns() {
+    const result = await run("读取外部任务记录", () => fetchJson<ExternalRunsResponse>("/memory/external-runs?limit=20"));
+    if (result) setExternalRuns(result);
+  }
+
+  async function submitExternalRun(event: FormEvent) {
+    event.preventDefault();
+    const related_sk_files = externalRunForm.related_sk_files
+      .split("\n")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const result = await run("记录外部任务", () =>
+      fetchJson<{ status: string; run: ExternalRun }>("/memory/external-run", {
+        method: "POST",
+        body: JSON.stringify({
+          ...externalRunForm,
+          related_sk_files,
+        }),
+      }),
+    );
+    if (result) {
+      await loadExternalRuns();
+    }
+  }
+
+  async function loadRoleList() {
+    const result = await run("读取内部角色", () => fetchJson<RoleListResponse>("/roles"));
+    if (result) setRoleList(result);
+  }
+
+  async function loadRoleRuns() {
+    const result = await run("读取角色运行记录", () => fetchJson<InternalRoleRunsResponse>("/roles/runs?limit=10"));
+    if (result) setRoleRuns(result);
+  }
+
+  async function runInternalRole(event: FormEvent) {
+    event.preventDefault();
+    const result = await run("运行内部角色", () =>
+      fetchJson<RoleRunResponse>("/roles/run", {
+        method: "POST",
+        body: JSON.stringify({
+          task_type: roleRunForm.task_type,
+          input: roleRunForm.input,
+          notes: roleRunForm.notes,
+          preferred_role: roleRunForm.preferred_role || null,
+          allow_web: roleRunForm.allow_web,
+          web_queries: roleRunForm.web_queries
+            .split("\n")
+            .map((item) => item.trim())
+            .filter(Boolean),
+        }),
+      }),
+    );
+    if (result) {
+      setRoleResult(result);
+      await loadRoleRuns();
+    }
+  }
+
   return (
     <main className="min-h-screen bg-panel text-ink">
+      {showIntro && <IntroModal close={() => setShowIntro(false)} />}
       <header className="border-b border-line bg-white">
         <div className="mx-auto max-w-7xl px-5 py-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -447,7 +684,7 @@ export default function Home() {
             <div className="flex flex-wrap gap-2">
               <Metric label="Backend" value={health} tone={health === "ok" ? "good" : "bad"} />
               <Metric label="Canonical" value={canonical ? `${canonical.read_count}/${canonical.total}` : "0/4"} />
-              <Metric label="API" value={apiBaseUrl()} />
+              <Metric label="API" value={apiDisplay} />
             </div>
           </div>
           <nav className="mt-5 flex flex-wrap gap-2">
@@ -557,8 +794,59 @@ export default function Home() {
             }}
           />
         )}
+        {activeTab === "memory" && (
+          <InternalRolesView
+            roles={roleList}
+            runs={roleRuns}
+            result={roleResult}
+            form={roleRunForm}
+            setForm={setRoleRunForm}
+            loadRoles={loadRoleList}
+            loadRuns={loadRoleRuns}
+            runRole={runInternalRole}
+          />
+        )}
       </div>
     </main>
+  );
+}
+
+function IntroModal({ close }: { close: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4">
+      <div className="w-full max-w-lg rounded-md border border-line bg-white p-5 shadow-xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold">SK Agent 工作台怎么用</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-600">先确认仓库状态，再检索和运行 Agent，最后只生成可审核入库稿。</p>
+          </div>
+          <button className="secondary-button shrink-0" type="button" onClick={close}>
+            关闭
+          </button>
+        </div>
+        <div className="mt-4 space-y-3 text-sm leading-6 text-slate-700">
+          <div>
+            <span className="font-semibold">1. 首页：</span>
+            点“手动拉取 SK 仓库”和“刷新 canonical”，确认核心文件是 4/4。
+          </div>
+          <div>
+            <span className="font-semibold">2. 审计页：</span>
+            先运行状态审计；如果有 high 风险，先处理状态漂移。
+          </div>
+          <div>
+            <span className="font-semibold">3. 检索/图谱：</span>
+            搜到结果后点“阅读文件”，只相信已读取文件里的证据。
+          </div>
+          <div>
+            <span className="font-semibold">4. Agent/入库稿：</span>
+            运行初拆、红队或发布检查；需要入库时只生成草稿，不会自动写 SK 仓库。
+          </div>
+        </div>
+        <button className="primary-button mt-5 w-full" type="button" onClick={close}>
+          开始使用
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -1121,6 +1409,107 @@ function stringValue(value: unknown) {
   return String(value);
 }
 
+function MemoryView({
+  registries,
+  externalRuns,
+  form,
+  setForm,
+  loadRegistries,
+  loadExternalRuns,
+  submitExternalRun,
+}: {
+  registries: MemoryRegistriesResponse | null;
+  externalRuns: ExternalRunsResponse | null;
+  form: ExternalRunForm;
+  setForm: (value: ExternalRunForm) => void;
+  loadRegistries: () => Promise<void>;
+  loadExternalRuns: () => Promise<void>;
+  submitExternalRun: (event: FormEvent) => Promise<void>;
+}) {
+  return (
+    <div className="grid gap-5 lg:grid-cols-[420px_1fr]">
+      <section>
+        <div className="mb-4 grid grid-cols-2 gap-2">
+          <button className="secondary-button" type="button" onClick={loadRegistries}>
+            查看分工
+          </button>
+          <button className="secondary-button" type="button" onClick={loadExternalRuns}>
+            最近记录
+          </button>
+        </div>
+        <form className="space-y-3 rounded-md border border-line bg-white p-4" onSubmit={submitExternalRun}>
+          <h2 className="text-base font-semibold">新增 external run</h2>
+          <select className="field" value={form.agent_type} onChange={(event) => setForm({ ...form, agent_type: event.target.value })}>
+            <option value="chatgpt_project">ChatGPT Project</option>
+            <option value="gpts">GPTS</option>
+            <option value="claude">Claude</option>
+            <option value="codex">Codex</option>
+            <option value="hermes">Hermes</option>
+            <option value="cursor">Cursor</option>
+            <option value="sk_agent">sk-agent</option>
+            <option value="other">Other</option>
+          </select>
+          <input className="field" placeholder="工具/Agent 名称" value={form.agent_name} onChange={(event) => setForm({ ...form, agent_name: event.target.value })} />
+          <input className="field" placeholder="任务类型" value={form.task_type} onChange={(event) => setForm({ ...form, task_type: event.target.value })} />
+          <textarea className="field min-h-24" placeholder="输入摘要" value={form.input_summary} onChange={(event) => setForm({ ...form, input_summary: event.target.value })} />
+          <textarea className="field min-h-24" placeholder="输出摘要" value={form.output_summary} onChange={(event) => setForm({ ...form, output_summary: event.target.value })} />
+          <input className="field" placeholder="来源链接或文件" value={form.source_link_or_file} onChange={(event) => setForm({ ...form, source_link_or_file: event.target.value })} />
+          <textarea className="field min-h-20" placeholder="关联 SK 文件，一行一个" value={form.related_sk_files} onChange={(event) => setForm({ ...form, related_sk_files: event.target.value })} />
+          <select className="field" value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}>
+            <option value="draft">draft</option>
+            <option value="reviewed">reviewed</option>
+            <option value="ingested">ingested</option>
+            <option value="rejected">rejected</option>
+            <option value="archived">archived</option>
+          </select>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={form.should_ingest} onChange={(event) => setForm({ ...form, should_ingest: event.target.checked })} />
+            建议入库
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={form.ingested} onChange={(event) => setForm({ ...form, ingested: event.target.checked })} />
+            已入库
+          </label>
+          <textarea className="field min-h-20" placeholder="备注" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} />
+          <button className="primary-button w-full" type="submit">
+            记录外部任务
+          </button>
+        </form>
+      </section>
+      <section className="min-w-0">
+        <Section title="多智能体分工">
+          <KeyValue
+            rows={[
+              ["内部 Agent", registries?.agent_registry],
+              ["GPTS", registries?.gpts_registry],
+              ["外部工具", registries?.external_tools],
+            ]}
+          />
+        </Section>
+        <Section title="最近 external runs">
+          <div className="space-y-3">
+            {(externalRuns?.runs ?? []).map((run) => (
+              <div key={run.id} className="rounded-md border border-line bg-white p-4 text-sm">
+                <div className="font-semibold">
+                  {run.agent_name} / {run.task_type}
+                </div>
+                <div className="mt-1 text-xs text-slate-500">
+                  {formatShanghaiTime(run.created_at)} / {run.agent_type} / {run.status}
+                </div>
+                <p className="mt-2 leading-6 text-slate-700">{run.output_summary}</p>
+                <div className="mt-2 text-xs text-slate-500">
+                  should_ingest={String(run.should_ingest)} / ingested={String(run.ingested)}
+                </div>
+              </div>
+            ))}
+            {!externalRuns && <div className="rounded-md border border-line bg-white p-4 text-sm">点击“最近记录”读取。</div>}
+          </div>
+        </Section>
+      </section>
+    </div>
+  );
+}
+
 function ResultHeader({ title, status }: { title: string; status?: string }) {
   return (
     <div className="mb-3 flex items-center justify-between gap-3 rounded-md border border-line bg-white px-4 py-3">
@@ -1194,6 +1583,144 @@ function AgentHistory({ records }: { records: AgentRunRecord[] }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function InternalRolesView({
+  roles,
+  runs,
+  result,
+  form,
+  setForm,
+  loadRoles,
+  loadRuns,
+  runRole,
+}: {
+  roles: RoleListResponse | null;
+  runs: InternalRoleRunsResponse | null;
+  result: RoleRunResponse | null;
+  form: RoleRunForm;
+  setForm: (value: RoleRunForm) => void;
+  loadRoles: () => Promise<void>;
+  loadRuns: () => Promise<void>;
+  runRole: (event: FormEvent) => Promise<void>;
+}) {
+  return (
+    <div className="grid gap-5 lg:grid-cols-[420px_1fr]">
+      <section>
+        <div className="mb-4 grid grid-cols-2 gap-2">
+          <button className="secondary-button" type="button" onClick={loadRoles}>
+            查看 role 列表
+          </button>
+          <button className="secondary-button" type="button" onClick={loadRuns}>
+            最近运行
+          </button>
+        </div>
+        <form className="space-y-3 rounded-md border border-line bg-white p-4" onSubmit={runRole}>
+          <h2 className="text-base font-semibold">运行内部角色</h2>
+          <div className="rounded-md border border-line bg-panel px-3 py-2 text-sm leading-6 text-slate-700">
+            联网只用于补候选证据，不会替代 SK 当前文件，不会自动入库。
+          </div>
+          <select className="field" value={form.task_type} onChange={(event) => setForm({ ...form, task_type: event.target.value })}>
+            {Object.entries(roleTaskLabels).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <input
+            className="field"
+            placeholder="指定内部角色，可不填，系统会自动选择"
+            value={form.preferred_role}
+            onChange={(event) => setForm({ ...form, preferred_role: event.target.value })}
+          />
+          <textarea
+            className="field min-h-36"
+            placeholder="任务内容"
+            value={form.input}
+            onChange={(event) => setForm({ ...form, input: event.target.value })}
+          />
+          <textarea
+            className="field min-h-24"
+            placeholder="补充说明"
+            value={form.notes}
+            onChange={(event) => setForm({ ...form, notes: event.target.value })}
+          />
+          <label className="flex items-center gap-2 rounded-md border border-line bg-panel px-3 py-2 text-sm">
+            <input
+              type="checkbox"
+              checked={form.allow_web}
+              onChange={(event) => setForm({ ...form, allow_web: event.target.checked })}
+            />
+            允许联网补证据
+          </label>
+          <textarea
+            className="field min-h-24"
+            placeholder="可选：每行一个搜索词；留空则由角色自动生成"
+            value={form.web_queries}
+            onChange={(event) => setForm({ ...form, web_queries: event.target.value })}
+          />
+          <button className="primary-button w-full" type="submit">
+            运行角色
+          </button>
+        </form>
+        <Section title="role 列表">
+          <div className="space-y-2">
+            {(roles?.roles ?? []).map((role) => (
+              <div key={role.role_id} className="rounded-md border border-line bg-white p-3 text-sm">
+                <div className="font-semibold">{role.role_name}</div>
+                <div className="text-xs text-slate-500">{role.role_id}</div>
+                <p className="mt-2 leading-6 text-slate-700">{role.purpose}</p>
+              </div>
+            ))}
+            {!roles && <div className="rounded-md border border-line bg-white p-3 text-sm">点击“查看 role 列表”。</div>}
+          </div>
+        </Section>
+      </section>
+      <section className="min-w-0">
+        <ResultHeader title={result?.role_name || "内部角色输出"} status={result?.status} />
+        <ReadFilesList files={result?.read_files ?? []} />
+        <KeyValue
+          rows={[
+            ["结论", result?.conclusion],
+            ["是否联网", result ? (result.web_used ? "是" : "否") : undefined],
+            ["候选来源", bulletList(result?.evidence_ledger || result?.structured_output?.evidence_ledger, "暂未找到候选来源。")],
+            ["缺失证据", bulletList(result?.missing_evidence || result?.structured_output?.missing_evidence, "暂未列出缺失证据。")],
+            ["风险", bulletList(result?.risks, "暂未发现额外风险。")],
+            ["最小下一步", result?.minimal_next_step],
+          ]}
+        />
+        <pre className="code-block mt-3 min-h-72">
+          {result?.human_readable_markdown || result?.answer_markdown || "尚未运行内部角色。"}
+        </pre>
+        {result && (
+          <details className="mt-3 rounded-md border border-line bg-white p-3 text-sm">
+            <summary className="cursor-pointer font-semibold">查看结构化输出</summary>
+            <KeyValue
+              rows={[
+                ["搜索词", result.web_queries],
+                ["warnings", result.warnings],
+                ["结构化输出", result.structured_output],
+              ]}
+            />
+          </details>
+        )}
+        <Section title="最近 10 次 internal_role_runs">
+          <div className="space-y-3">
+            {(runs?.runs ?? []).map((run) => (
+              <div key={run.id} className="rounded-md border border-line bg-white p-4 text-sm">
+                <div className="font-semibold">
+                  {run.role_name} / {roleTaskLabels[run.task_type] || run.task_type}
+                </div>
+                <div className="mt-1 text-xs text-slate-500">{formatShanghaiTime(run.created_at)}</div>
+                <p className="mt-2 leading-6 text-slate-700">{run.conclusion}</p>
+              </div>
+            ))}
+            {!runs && <div className="rounded-md border border-line bg-white p-4 text-sm">点击“最近运行”读取。</div>}
+          </div>
+        </Section>
+      </section>
     </div>
   );
 }

@@ -66,8 +66,46 @@ def ensure_schema() -> None:
                     error_message TEXT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS external_agent_runs (
+                    id BIGSERIAL PRIMARY KEY,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    agent_type TEXT NOT NULL,
+                    agent_name TEXT NOT NULL,
+                    task_type TEXT NOT NULL,
+                    input_summary TEXT NOT NULL,
+                    output_summary TEXT NOT NULL,
+                    source_link_or_file TEXT NULL,
+                    related_sk_files_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    status TEXT NOT NULL,
+                    should_ingest BOOLEAN NOT NULL DEFAULT false,
+                    ingested BOOLEAN NOT NULL DEFAULT false,
+                    notes TEXT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS internal_role_runs (
+                    id BIGSERIAL PRIMARY KEY,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                    role_id TEXT NOT NULL,
+                    role_name TEXT NOT NULL,
+                    task_type TEXT NOT NULL,
+                    input_summary TEXT NOT NULL,
+                    read_files_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    structured_output_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    conclusion TEXT NOT NULL,
+                    risks_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+                    minimal_next_step TEXT NOT NULL,
+                    answer_markdown TEXT NOT NULL,
+                    should_ingest BOOLEAN NOT NULL DEFAULT false,
+                    ingested BOOLEAN NOT NULL DEFAULT false,
+                    notes TEXT NULL
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_chunks_file_path ON chunks(file_path);
                 CREATE INDEX IF NOT EXISTS idx_chunks_heading ON chunks(heading);
                 CREATE INDEX IF NOT EXISTS idx_files_path ON files(path);
+                CREATE INDEX IF NOT EXISTS idx_external_agent_runs_created_at
+                    ON external_agent_runs(created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_internal_role_runs_created_at
+                    ON internal_role_runs(created_at DESC);
                 """
             )

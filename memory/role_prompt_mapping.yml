@@ -1,0 +1,38 @@
+# SKGPT is the role instruction source only.
+# These paths are intentionally configurable because SKGPT may reorganize files.
+# Update prompt_path after confirming the real file names in MRYGP/SKGPT.
+
+deep_researcher_role:
+  source_repo: SKGPT
+  prompt_path: "instructions/deep-researcher-gpts-builder-instructions.md"
+  fallback_prompt_path: null
+
+writing_workshop_role:
+  source_repo: SKGPT
+  prompt_path: "instructions/writing-workshop.md"
+  fallback_prompt_path: "instructions/sk-gpts-system-instructions.md"
+
+first_reader_role:
+  source_repo: SKGPT
+  prompt_path: "instructions/first-reader.md"
+  fallback_prompt_path: "instructions/sk-gpts-system-instructions.md"
+
+product_teardown_role:
+  source_repo: SKGPT
+  prompt_path: "instructions/sk-product-teardown-gpts-instructions.md"
+  fallback_prompt_path: "instructions/sk-product-teardown-gpts-builder-instructions.md"
+
+article_publish_check_role:
+  source_repo: SKGPT
+  prompt_path: "instructions/article-publish-check.md"
+  fallback_prompt_path: "instructions/sk-gpts-system-instructions.md"
+
+repo_governance_role:
+  source_repo: SKGPT
+  prompt_path: "instructions/chatgpt-project-instructions.md"
+  fallback_prompt_path: null
+
+patch_writer_role:
+  source_repo: SKGPT
+  prompt_path: "instructions/patch-writer.md"
+  fallback_prompt_path: "instructions/chatgpt-project-instructions.md"

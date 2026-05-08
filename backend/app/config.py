@@ -34,9 +34,12 @@ class Settings:
     repo_sync_url: str = "https://github.com/MRYGP/SK.git"
     repo_sync_path: str = "/repo-cache/SK"
     sk_repo_url: str = "https://github.com/MRYGP/SK.git"
-    skgpt_repo_url: str = ""
+    skgpt_repo_url: str = "https://github.com/MRYGP/SKGPT.git"
     sk_repo_local_path: str = ""
     skgpt_repo_local_path: str = ""
+    skgpt_branch: str = "main"
+    web_search_provider: str = "tavily"
+    tavily_api_key: str = ""
 
 
 @lru_cache(maxsize=1)
@@ -79,9 +82,16 @@ def get_settings() -> Settings:
         or "/repo-cache/SK",
         sk_repo_url=os.getenv("SK_REPO_URL", "https://github.com/MRYGP/SK.git").strip()
         or "https://github.com/MRYGP/SK.git",
-        skgpt_repo_url=os.getenv("SKGPT_REPO_URL", "").strip(),
+        skgpt_repo_url=os.getenv(
+            "SKGPT_REPO_URL",
+            "https://github.com/MRYGP/SKGPT.git",
+        ).strip()
+        or "https://github.com/MRYGP/SKGPT.git",
         sk_repo_local_path=os.getenv("SK_REPO_LOCAL_PATH", "").strip(),
         skgpt_repo_local_path=os.getenv("SKGPT_REPO_LOCAL_PATH", "").strip(),
+        skgpt_branch=os.getenv("SKGPT_BRANCH", "main").strip() or "main",
+        web_search_provider=os.getenv("WEB_SEARCH_PROVIDER", "tavily").strip() or "tavily",
+        tavily_api_key=os.getenv("TAVILY_API_KEY", "").strip(),
     )
 
 

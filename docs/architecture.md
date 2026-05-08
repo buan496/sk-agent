@@ -44,7 +44,9 @@ SK 与 SKGPT 是两个职责不同的仓库，不能混作同一个内容源：
 - SK：内容、案例、状态、方法论。
 - SKGPT：Project Instructions、GPTS 配置、上传清单、现读协议。
 
-SK Agent 的内容索引只面向 SK 仓库。`SKGPT_REPO_URL` 与 `SKGPT_REPO_LOCAL_PATH` 只用于后续读取配置/协议，不进入 SK 内容索引。当前 `indexer.py` 会跳过常见 SKGPT 配置目录，避免把 GPTS 配置误当作 SK 内容材料。
+SK Agent 的内容索引只面向 SK 仓库。`SKGPT_REPO_URL` 与 `SKGPT_REPO_LOCAL_PATH` 只用于读取配置/协议，不进入 SK 内容索引。当前 `indexer.py` 会跳过常见 SKGPT 配置目录，避免把 GPTS 配置误当作 SK 内容材料。
+
+Phase 9.4 起，`/skgpt/*` 接口可以读取 SKGPT 角色指令，并通过 `memory/role_prompt_mapping.yml` 映射到内部角色 prompt。SKGPT 仍然不是 SK 当前状态源。
 
 ## Canonical Preflight
 

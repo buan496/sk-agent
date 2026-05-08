@@ -1,0 +1,1 @@
+"""Internal SK role system."""

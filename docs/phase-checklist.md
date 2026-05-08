@@ -304,3 +304,145 @@
 - [x] 后端 Docker 测试通过：`33 passed`
 - [x] 前端 Docker 构建通过：`docker compose run --rm frontend npm run build`
 - [x] 输出 `docs/phase-8-5-compliance.md`
+
+## 第 9.2 期：多智能体记忆与路由系统
+
+状态：完成第一版；外部记录能力保留为外援记录。
+
+- [x] 新增 `memory/core_memory.md`
+- [x] 新增 `memory/constitution.md`
+- [x] 新增 `memory/agent_registry.md`
+- [x] 新增 `memory/gpts_registry.md`
+- [x] 新增 `memory/external_tools.md`
+- [x] 新增 `memory/episodes/drift-log.md`
+- [x] 新增 `memory/episodes/agent-lessons.md`
+- [x] 新增 `memory/episodes/routing-lessons.md`
+- [x] 新增 `external_agent_runs` 表
+- [x] 新增 `GET /memory/core`
+- [x] 新增 `GET /memory/registries`
+- [x] 新增 `GET /memory/episodes`
+- [x] 新增 `POST /memory/external-run`
+- [x] 新增 `GET /memory/external-runs?limit=20`
+- [x] 前端新增最小 Memory 入口
+- [x] `memory/` 不进入 SK 内容索引
+- [x] 不引入 Vue / LangGraph / Mem0 / Zep / Letta
+- [x] 不自动 commit / PR / 写 SK 仓库
+
+验收：
+- [x] 后端 Docker 测试通过：`38 passed`
+- [x] 前端 Docker 构建通过：`docker compose run --rm frontend npm run build`
+- [x] 输出 `docs/phase-9-2-multi-agent-memory.md`
+
+## 第 9.2 修正版：内部多角色记忆与路由系统
+
+状态：完成。
+
+- [x] 新增 `backend/app/roles/base_role.py`
+- [x] 新增 `backend/app/roles/role_registry.py`
+- [x] 新增 `backend/app/roles/role_router.py`
+- [x] 新增 `deep_researcher_role`
+- [x] 新增 `writing_workshop_role`
+- [x] 新增 `first_reader_role`
+- [x] 新增 `product_teardown_role`
+- [x] 新增 `repo_governance_role`
+- [x] 新增 `patch_writer_role`
+- [x] 新增 `internal_role_runs` 表
+- [x] 新增 `GET /roles`
+- [x] 新增 `POST /roles/run`
+- [x] 新增 `GET /roles/runs?limit=10`
+- [x] `/roles/run` 统一 canonical preflight
+- [x] `/roles/run` 写入 `internal_role_runs`
+- [x] 新增 `memory/internal_roles.md`
+- [x] 新增 `memory/episodes/role-lessons.md`
+- [x] 新增 `docs/internal-role-system.md`
+- [x] 新增 `docs/phase-9-2-internal-role-memory.md`
+- [x] 前端 Memory 页调整为内部角色主入口
+- [x] 不引入 Vue / LangGraph / Mem0 / Zep / Letta
+- [x] 不自动 commit / push / PR / 写 SK 仓库
+
+验收：
+- [x] 后端 Docker 测试通过：`45 passed`
+- [x] 前端 Docker 构建通过：`docker compose run --rm frontend npm run build`
+- [x] `/roles/run` 实际调用成功
+
+## 第 9.4 期：连接 SKGPT 角色指令仓库
+
+状态：完成第一版。
+
+- [x] `.env.example` 增加 `SKGPT_REPO_URL=https://github.com/MRYGP/SKGPT.git`
+- [x] `.env.example` 增加 `SKGPT_BRANCH=main`
+- [x] Docker backend 增加 SKGPT 读取配置
+- [x] 新增 `backend/app/services/skgpt_reader.py`
+- [x] 新增 `backend/app/roles/role_prompt_loader.py`
+- [x] 新增 `backend/app/api/skgpt.py`
+- [x] 新增 `memory/role_prompt_mapping.yml`
+- [x] 新增 `GET /skgpt/files`
+- [x] 新增 `GET /skgpt/file?path=`
+- [x] 新增 `GET /skgpt/role-prompts`
+- [x] `/skgpt/role-prompts` 可读取 SKGPT 中已存在的角色指令文件
+- [x] SKGPT 只作为角色配置源，不进入 SK 内容索引
+- [x] 不自动 commit / push / PR / 写 SK 仓库
+
+验收：
+- [x] 后端 Docker 测试通过：`49 passed`
+- [x] 已重启 backend 容器
+- [x] `/skgpt/role-prompts` 实际调用成功
+- [x] 输出 `docs/phase-9-4-skgpt-role-prompts.md`
+
+## 第 9.3 期：内部角色可控联网
+
+状态：完成第一版。
+
+- [x] 新增 `backend/app/services/web_search.py`
+- [x] 新增 `backend/app/services/search_providers/base.py`
+- [x] 新增 `backend/app/services/search_providers/mock_provider.py`
+- [x] 新增 `backend/app/services/search_providers/tavily_provider.py`
+- [x] 新增 `backend/app/services/evidence_classifier.py`
+- [x] 新增 `POST /web/search`
+- [x] `/roles/run` 增加 `allow_web` 和 `web_queries`
+- [x] `deep_researcher_role` 接入候选联网证据
+- [x] `product_teardown_role` 接入候选联网证据
+- [x] 新增 `article_publish_check_role`
+- [x] 不允许联网的 role 返回 warning，不执行联网
+- [x] 前端内部角色页增加“允许联网补证据”
+- [x] 前端内部角色页增加 `web_queries` 输入框
+- [x] 输出 `docs/phase-9-3-controlled-web-search.md`
+
+验收：
+- [x] 后端 Docker 测试通过：`56 passed`
+- [x] 前端 Docker 构建通过：`docker compose run --rm frontend npm run build`
+
+## 第 9.3a 期：Human Readable Research View
+
+状态：完成第一版。
+
+- [x] 保留 `structured_output`
+- [x] `/roles/run` 新增 `human_readable_markdown`
+- [x] 前端默认显示人类可读研究简报
+- [x] 前端默认显示结论、候选来源、缺失证据、风险、下一步
+- [x] 结构化 JSON 折叠到“查看结构化输出”
+- [x] 不修改角色业务逻辑
+- [x] 不移除 `structured_output`
+
+验收：
+- [x] 后端 Docker 测试通过：`56 passed`
+- [x] 前端 Docker 构建通过：`docker compose run --rm frontend npm run build`
+
+## 第 9.3b 期：接入真实 Tavily 搜索
+
+状态：完成第一版，等待用户填写 `TAVILY_API_KEY`。
+
+- [x] `tavily_provider.py` 使用 Tavily Search API
+- [x] 使用 `TAVILY_API_KEY`
+- [x] `/web/search` 可返回 `provider=tavily`
+- [x] 保留 `title/url/snippet/fetched_at/provider`
+- [x] 保留 `source_type` 分类
+- [x] 保留 evidence candidate 规则
+- [x] Tavily 搜索失败自动 fallback 到 `mock_provider`
+- [x] 新增 `docs/phase-9-3b-tavily.md`
+- [x] 不修改角色系统
+- [x] 不修改 canonical preflight
+- [x] 不自动入库
+
+验收：
+- [x] 后端 Docker 测试通过：`58 passed`

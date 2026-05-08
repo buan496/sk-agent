@@ -243,6 +243,7 @@ SKGPT_PATH_PREFIXES = (
     "project_instructions/",
     "uploads/",
     "upload-lists/",
+    "memory/",
 )
 
 

@@ -1,0 +1,39 @@
+from __future__ import annotations
+
+from typing import Any
+
+
+def candidate_level_for_source(source_type: str) -> str:
+    normalized = (source_type or "").strip().lower()
+    if normalized == "official":
+        return "A_candidate"
+    if normalized == "media":
+        return "B_candidate"
+    if normalized == "community":
+        return "C_candidate"
+    return "X_candidate"
+
+
+def confidence_for_source(source_type: str) -> float:
+    normalized = (source_type or "").strip().lower()
+    if normalized == "official":
+        return 0.78
+    if normalized == "media":
+        return 0.62
+    if normalized == "community":
+        return 0.4
+    return 0.2
+
+
+def web_result_to_evidence(claim: str, result: dict[str, Any]) -> dict[str, Any]:
+    source_type = str(result.get("source_type") or "unknown")
+    return {
+        "claim": claim,
+        "source_title": result.get("title") or "",
+        "source_url": result.get("url") or "",
+        "source_type": source_type,
+        "evidence_level": candidate_level_for_source(source_type),
+        "confidence": confidence_for_source(source_type),
+        "fetched_at": result.get("fetched_at"),
+        "note": "联网结果只是候选证据，不能覆盖 canonical files，不能自动入库。",
+    }

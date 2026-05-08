@@ -7,9 +7,13 @@ from app.api.agents import router as agents_router
 from app.api.graph import router as graph_router
 from app.api.index import router as index_router
 from app.api.llm import router as llm_router
+from app.api.memory import router as memory_router
 from app.api.patch import router as patch_router
 from app.api.repo import router as repo_router
+from app.api.roles import router as roles_router
 from app.api.search import router as search_router
+from app.api.skgpt import router as skgpt_router
+from app.api.web import router as web_router
 from app.config import get_settings
 
 settings = get_settings()
@@ -22,6 +26,7 @@ app.add_middleware(
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     ],
+    allow_origin_regex=r"https?://.*:3000",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -40,3 +45,7 @@ app.include_router(search_router)
 app.include_router(agents_router)
 app.include_router(patch_router)
 app.include_router(graph_router)
+app.include_router(memory_router)
+app.include_router(roles_router)
+app.include_router(skgpt_router)
+app.include_router(web_router)
