@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.api.repo import get_repo_reader
 from app.config import Settings, get_settings
+from app.services.canonical_preflight import canonical_preflight
 from app.services.graph_builder import GraphBuilder, GraphUnavailableError
+from app.services.repo_reader import RepoReader
 
 router = APIRouter(prefix="/graph", tags=["graph"])
 
@@ -21,9 +24,20 @@ def rebuild_graph(builder: GraphBuilder = Depends(get_graph_builder)) -> dict:
 
 
 @router.get("/status")
-def graph_status(builder: GraphBuilder = Depends(get_graph_builder)) -> dict:
+def graph_status(
+    builder: GraphBuilder = Depends(get_graph_builder),
+    reader: RepoReader = Depends(get_repo_reader),
+) -> dict:
     try:
-        return builder.status()
+        status = builder.status()
+        preflight = canonical_preflight(reader)
+        status["canonical_read_status"] = {
+            "status": preflight.get("status"),
+            "read_count": preflight.get("read_count"),
+            "total": preflight.get("total"),
+            "read_files": preflight.get("read_files", []),
+        }
+        return status
     except GraphUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 

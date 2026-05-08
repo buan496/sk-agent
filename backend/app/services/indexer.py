@@ -27,6 +27,7 @@ class Indexer:
                 item
                 for item in file_tree.get("files", [])
                 if str(item.get("path", "")).lower().endswith(".md")
+                and _is_sk_content_path(str(item.get("path", "")))
             ]
 
             indexed_files = 0
@@ -232,3 +233,19 @@ class Indexer:
 
 def _sha256(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+SKGPT_PATH_PREFIXES = (
+    "skgpt/",
+    ".skgpt/",
+    "gpts/",
+    "project-instructions/",
+    "project_instructions/",
+    "uploads/",
+    "upload-lists/",
+)
+
+
+def _is_sk_content_path(path: str) -> bool:
+    normalized = path.replace("\\", "/").lower().lstrip("/")
+    return not any(normalized.startswith(prefix) for prefix in SKGPT_PATH_PREFIXES)

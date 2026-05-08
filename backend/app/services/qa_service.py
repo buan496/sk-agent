@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.config import Settings
+from app.services.canonical_preflight import merge_read_files
 from app.services.llm_client import ChatMessage, get_llm_client
 from app.services.repo_reader import RepoReader
 from app.services.retriever import Retriever
@@ -24,17 +25,26 @@ class QAService:
         self.reader = reader
         self.retriever = Retriever()
 
-    def ask(self, question: str, limit: int = 8) -> dict[str, Any]:
+    def ask(
+        self,
+        question: str,
+        limit: int = 8,
+        preflight: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        canonical_read_files = preflight.get("read_files", []) if preflight else []
         search_result = self.retriever.search(question, limit=limit)
         hits = search_result.get("results", [])
-        read_files = self._verify_current_files(search_result.get("read_files", []))
+        read_files = merge_read_files(
+            canonical_read_files,
+            self._verify_current_files(search_result.get("read_files", [])),
+        )
         read_ok_paths = [item["path"] for item in read_files if item["status"] == "ok"]
 
         if not hits:
             return {
                 "status": "no_context",
                 "question": question,
-                "answer": "已读取文件：无。\n\n本次检索没有找到可支撑回答的仓库片段，因此不确定，不能编。",
+                "answer": "已读取 canonical 文件，详见 read_files。本次检索没有找到可支撑回答的仓库片段，因此不确定，不能编。",
                 "read_files": read_files,
                 "search": search_result,
             }

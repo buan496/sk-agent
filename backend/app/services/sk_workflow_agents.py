@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.config import Settings
+from app.services.canonical_preflight import canonical_preflight, merge_read_files
 from app.services.llm_client import (
     ChatMessage,
     LLMConfigurationError,
@@ -40,6 +41,7 @@ class WorkflowInput:
     value: str
     notes: str = ""
     limit: int = 8
+    preflight: dict[str, Any] | None = None
 
 
 class SKWorkflowAgents:
@@ -58,7 +60,9 @@ class SKWorkflowAgents:
         if not product_name:
             raise ValueError("product_name 不能为空")
 
-        status_audit = StatusAuditor(self.reader).audit()
+        preflight = request.preflight or canonical_preflight(self.reader)
+        canonical_read_files = preflight.get("read_files", [])
+        status_audit = StatusAuditor(self.reader).audit(preflight=preflight)
         search_result = self._safe_search(
             f"{product_name} 产品 初拆 案例 case-card",
             limit=request.limit,
@@ -68,7 +72,8 @@ class SKWorkflowAgents:
             fallback_queries=["轻量初拆 模板", "product teardown template"],
         )
         search_files = self._read_search_files(search_result)
-        read_files = _unique_read_files(
+        read_files = merge_read_files(
+            canonical_read_files,
             status_audit.get("read_files", []),
             template_docs["read_files"],
             search_files,
@@ -91,23 +96,38 @@ class SKWorkflowAgents:
             ],
         )
         completion = self._safe_chat(prompt, _fallback_product_teardown(product_name, ingest_recommendation))
-        return {
-            "status": "ok",
-            "agent": "product_teardown",
-            "product_name": product_name,
-            "read_files": read_files,
-            "status_audit_summary": status_audit.get("summary"),
-            "search": _compact_search(search_result),
-            "ingest_recommendation": ingest_recommendation,
-            "answer": completion["content"],
-            "llm": completion["llm"],
-        }
+        answer_markdown = completion["content"]
+        return _agent_response(
+            {
+                "status": "ok",
+                "agent": "product_teardown",
+                "product_name": product_name,
+                "read_files": read_files,
+                "status_audit_summary": status_audit.get("summary"),
+                "search": _compact_search(search_result),
+                "ingest_recommendation": ingest_recommendation,
+                "answer": answer_markdown,
+                "llm": completion["llm"],
+                "conclusion": _product_conclusion(ingest_recommendation, status_audit),
+                "evidence": {
+                    "status_audit": status_audit.get("summary"),
+                    "search": _compact_search(search_result),
+                    "template_paths": PRODUCT_TEMPLATE_PATHS,
+                },
+                "risks": _product_risks(status_audit, search_result),
+                "minimal_next_step": _product_next_step(ingest_recommendation),
+                "ingest_draft": ingest_recommendation,
+                "answer_markdown": answer_markdown,
+            }
+        )
 
     def framework_red_team(self, request: WorkflowInput) -> dict[str, Any]:
         idea = request.value.strip()
         if not idea:
             raise ValueError("idea 不能为空")
 
+        preflight = request.preflight or canonical_preflight(self.reader)
+        canonical_read_files = preflight.get("read_files", [])
         search_result = self._safe_search(
             f"{idea} 项目审问 产品评估 failure_modes 失败模式",
             limit=request.limit,
@@ -117,7 +137,7 @@ class SKWorkflowAgents:
             fallback_queries=["项目审问清单", "产品评估决策清单", "failure_modes"],
         )
         search_files = self._read_search_files(search_result)
-        read_files = _unique_read_files(docs["read_files"], search_files)
+        read_files = merge_read_files(canonical_read_files, docs["read_files"], search_files)
         prompt = _format_prompt(
             title="框架红队",
             instructions=[
@@ -131,28 +151,45 @@ class SKWorkflowAgents:
             context_blocks=[docs["context"], _search_context(search_result)],
         )
         completion = self._safe_chat(prompt, _fallback_red_team(idea))
-        return {
-            "status": "ok",
-            "agent": "framework_red_team",
-            "idea": idea,
-            "read_files": read_files,
-            "search": _compact_search(search_result),
-            "answer": completion["content"],
-            "llm": completion["llm"],
-        }
+        answer_markdown = completion["content"]
+        return _agent_response(
+            {
+                "status": "ok",
+                "agent": "framework_red_team",
+                "idea": idea,
+                "read_files": read_files,
+                "search": _compact_search(search_result),
+                "answer": answer_markdown,
+                "llm": completion["llm"],
+                "conclusion": _first_non_empty_line(answer_markdown) or "Hold：需要更多证据后再判断。",
+                "evidence": {
+                    "search": _compact_search(search_result),
+                    "required_paths": RED_TEAM_PATHS,
+                },
+                "risks": _workflow_risks(search_result, docs["read_files"]),
+                "minimal_next_step": "补充目标用户、场景、替代方案和可验证证据；必要时再生成入库稿。",
+                "ingest_draft": {
+                    "required": False,
+                    "reason": "框架红队输出先用于判断，入库前需要人工确认。",
+                },
+                "answer_markdown": answer_markdown,
+            }
+        )
 
     def article_publish_check(self, request: WorkflowInput) -> dict[str, Any]:
         article = request.value.strip()
         if not article:
             raise ValueError("final_article 不能为空")
 
+        preflight = request.preflight or canonical_preflight(self.reader)
+        canonical_read_files = preflight.get("read_files", [])
         docs = self._read_documents(
             PUBLISH_CHECK_PATHS,
             fallback_queries=["公众号写作指南", "内容生产经验手册", "文章发布SOP"],
         )
         search_result = self._safe_search("公众号写作指南 内容生产经验手册 发布 SOP", limit=request.limit)
         search_files = self._read_search_files(search_result)
-        read_files = _unique_read_files(docs["read_files"], search_files)
+        read_files = merge_read_files(canonical_read_files, docs["read_files"], search_files)
         prompt = _format_prompt(
             title="文章发布检查",
             instructions=[
@@ -166,15 +203,30 @@ class SKWorkflowAgents:
             context_blocks=[docs["context"], _search_context(search_result)],
         )
         completion = self._safe_chat(prompt, _fallback_publish_check(article))
-        return {
-            "status": "ok",
-            "agent": "article_publish_check",
-            "article_length": len(article),
-            "read_files": read_files,
-            "search": _compact_search(search_result),
-            "answer": completion["content"],
-            "llm": completion["llm"],
-        }
+        answer_markdown = completion["content"]
+        return _agent_response(
+            {
+                "status": "ok",
+                "agent": "article_publish_check",
+                "article_length": len(article),
+                "read_files": read_files,
+                "search": _compact_search(search_result),
+                "answer": answer_markdown,
+                "llm": completion["llm"],
+                "conclusion": _first_non_empty_line(answer_markdown) or "需要按发布 SOP 做人工复核。",
+                "evidence": {
+                    "search": _compact_search(search_result),
+                    "required_paths": PUBLISH_CHECK_PATHS,
+                },
+                "risks": _workflow_risks(search_result, docs["read_files"]),
+                "minimal_next_step": "按风险检查修订终稿，确认事实、案例状态和发布清单后再发布。",
+                "ingest_draft": {
+                    "required": False,
+                    "reason": "发布检查结果不自动入库；如需入库，应走 /patch/draft 生成草稿。",
+                },
+                "answer_markdown": answer_markdown,
+            }
+        )
 
     def _safe_search(self, query: str, limit: int) -> dict[str, Any]:
         try:
@@ -364,6 +416,74 @@ def _read_file_summary(result: dict[str, Any]) -> dict[str, Any]:
         "last_modified": file_meta.get("last_modified"),
         "message": result.get("message"),
     }
+
+
+def _agent_response(payload: dict[str, Any]) -> dict[str, Any]:
+    answer_markdown = payload.get("answer_markdown") or payload.get("answer") or ""
+    payload.setdefault("conclusion", _first_non_empty_line(answer_markdown) or "不确定")
+    payload.setdefault("read_files", [])
+    payload.setdefault("evidence", {})
+    payload.setdefault("risks", [])
+    payload.setdefault("minimal_next_step", "先人工复核本次读取文件和证据。")
+    payload.setdefault(
+        "ingest_draft",
+        {"required": False, "reason": "未生成入库稿；如需入库，请走 /patch/draft。"},
+    )
+    payload["answer_markdown"] = answer_markdown
+    payload.setdefault("answer", answer_markdown)
+    return payload
+
+
+def _first_non_empty_line(markdown: str) -> str:
+    for line in markdown.splitlines():
+        stripped = line.strip().strip("#").strip()
+        if stripped and stripped not in {"结论", "已读取文件"}:
+            return stripped
+    return ""
+
+
+def _product_conclusion(
+    ingest_recommendation: dict[str, Any],
+    status_audit: dict[str, Any],
+) -> str:
+    decision = ingest_recommendation.get("decision") or "unknown"
+    risk_level = status_audit.get("risk_level") or "unknown"
+    return f"入库判断：{decision}；状态审计风险：{risk_level}。"
+
+
+def _product_risks(status_audit: dict[str, Any], search_result: dict[str, Any]) -> list[str]:
+    risks: list[str] = []
+    conflict_count = int((status_audit.get("summary") or {}).get("conflict_count") or 0)
+    if conflict_count:
+        risks.append(f"状态审计发现 {conflict_count} 个冲突，入库前需要先校准。")
+    if int(search_result.get("count") or 0):
+        risks.append("仓库已有相关命中，入库前需要排重。")
+    if not risks:
+        risks.append("未发现阻断风险，但仍需人工复核事实和路径。")
+    return risks
+
+
+def _product_next_step(ingest_recommendation: dict[str, Any]) -> str:
+    if ingest_recommendation.get("decision") == "check_duplicate":
+        return "先读取检索命中文件做排重，确认不是重复内容后再生成 /patch/draft 入库稿。"
+    return "使用 /patch/draft 生成可审核入库稿，不直接写入仓库。"
+
+
+def _workflow_risks(
+    search_result: dict[str, Any],
+    required_read_files: list[dict[str, Any]],
+) -> list[str]:
+    risks: list[str] = []
+    missing = [item.get("path") for item in required_read_files if item.get("status") != "ok"]
+    if missing:
+        risks.append(f"部分工作流参考文件本次未读取到：{', '.join(str(path) for path in missing)}")
+    if search_result.get("status") == "error":
+        risks.append(f"检索失败：{search_result.get('message')}")
+    if int(search_result.get("count") or 0) == 0:
+        risks.append("本次没有检索到可交叉验证的仓库片段。")
+    if not risks:
+        risks.append("未发现阻断风险，但结论仍以本次读取文件为准。")
+    return risks
 
 
 def _unique_read_files(*groups: list[dict[str, Any]]) -> list[dict[str, Any]]:

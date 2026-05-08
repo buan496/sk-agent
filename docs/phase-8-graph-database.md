@@ -106,5 +106,7 @@ GET /graph/theories/reused
 
 - Graph extraction is deterministic and conservative.
 - The graph is rebuilt from the PostgreSQL index; rebuild `/index/rebuild` first when repository content changes.
+- Graph is advisory only. Canonical files override graph memory.
+- `/graph/status` reports `latest_index_run`, `graph_rebuild_time`, `source_chunk_count`, and `canonical_read_status` so stale graph data is visible before use.
 - No GitHub write API is used.
 - No local SK repository files are modified.

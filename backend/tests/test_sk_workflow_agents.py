@@ -92,6 +92,8 @@ def test_product_teardown_returns_fallback_without_llm_key() -> None:
     assert result["llm"]["status"] == "unavailable"
     assert result["ingest_recommendation"]["decision"] == "check_duplicate"
     assert result["read_files"]
+    assert_schema_fields(result)
+    assert [item["path"] for item in result["read_files"][:4]] == CANONICAL_FILES
 
 
 def test_framework_red_team_returns_hold_fallback() -> None:
@@ -106,6 +108,8 @@ def test_framework_red_team_returns_hold_fallback() -> None:
     assert result["status"] == "ok"
     assert result["agent"] == "framework_red_team"
     assert "Hold" in result["answer"]
+    assert_schema_fields(result)
+    assert [item["path"] for item in result["read_files"][:4]] == CANONICAL_FILES
 
 
 def test_article_publish_check_returns_publish_package_fallback() -> None:
@@ -120,6 +124,8 @@ def test_article_publish_check_returns_publish_package_fallback() -> None:
     assert result["status"] == "ok"
     assert result["agent"] == "article_publish_check"
     assert "发布包" in result["answer"]
+    assert_schema_fields(result)
+    assert [item["path"] for item in result["read_files"][:4]] == CANONICAL_FILES
 
 
 def test_product_teardown_api_rejects_empty_product_name() -> None:
@@ -128,3 +134,16 @@ def test_product_teardown_api_rejects_empty_product_name() -> None:
     response = client.post("/agents/product-teardown", json={"product_name": ""})
 
     assert response.status_code == 422
+
+
+def assert_schema_fields(result: dict) -> None:
+    for field in (
+        "conclusion",
+        "read_files",
+        "evidence",
+        "risks",
+        "minimal_next_step",
+        "ingest_draft",
+        "answer_markdown",
+    ):
+        assert field in result

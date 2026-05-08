@@ -33,12 +33,16 @@ class Settings:
     neo4j_password: str = "sk_agent_neo4j"
     repo_sync_url: str = "https://github.com/MRYGP/SK.git"
     repo_sync_path: str = "/repo-cache/SK"
+    sk_repo_url: str = "https://github.com/MRYGP/SK.git"
+    skgpt_repo_url: str = ""
+    sk_repo_local_path: str = ""
+    skgpt_repo_local_path: str = ""
 
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings(
-        local_repo_path=os.getenv("LOCAL_REPO_PATH", "").strip(),
+        local_repo_path=os.getenv("LOCAL_REPO_PATH", os.getenv("SK_REPO_LOCAL_PATH", "")).strip(),
         github_repo=os.getenv("GITHUB_REPO", "").strip(),
         github_branch=os.getenv("GITHUB_BRANCH", "main").strip() or "main",
         github_token=os.getenv("GITHUB_TOKEN", "").strip(),
@@ -68,11 +72,16 @@ def get_settings() -> Settings:
         or "sk_agent_neo4j",
         repo_sync_url=os.getenv(
             "REPO_SYNC_URL",
-            "https://github.com/MRYGP/SK.git",
+            os.getenv("SK_REPO_URL", "https://github.com/MRYGP/SK.git"),
         ).strip()
         or "https://github.com/MRYGP/SK.git",
         repo_sync_path=os.getenv("REPO_SYNC_PATH", "/repo-cache/SK").strip()
         or "/repo-cache/SK",
+        sk_repo_url=os.getenv("SK_REPO_URL", "https://github.com/MRYGP/SK.git").strip()
+        or "https://github.com/MRYGP/SK.git",
+        skgpt_repo_url=os.getenv("SKGPT_REPO_URL", "").strip(),
+        sk_repo_local_path=os.getenv("SK_REPO_LOCAL_PATH", "").strip(),
+        skgpt_repo_local_path=os.getenv("SKGPT_REPO_LOCAL_PATH", "").strip(),
     )
 
 

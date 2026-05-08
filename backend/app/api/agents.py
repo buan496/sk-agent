@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from app.api.repo import get_repo_reader
 from app.config import Settings, get_settings
+from app.services.canonical_preflight import canonical_preflight
 from app.services.repo_reader import RepoReader
 from app.services.sk_workflow_agents import SKWorkflowAgents, WorkflowInput
 from app.services.status_auditor import StatusAuditor
@@ -32,7 +33,8 @@ class ArticlePublishCheckRequest(BaseModel):
 
 @router.post("/status-audit")
 def status_audit(reader: RepoReader = Depends(get_repo_reader)) -> dict:
-    return StatusAuditor(reader).audit()
+    preflight = canonical_preflight(reader)
+    return StatusAuditor(reader).audit(preflight=preflight)
 
 
 @router.post("/product-teardown")
@@ -42,11 +44,13 @@ def product_teardown(
     reader: RepoReader = Depends(get_repo_reader),
 ) -> dict:
     try:
+        preflight = canonical_preflight(reader)
         return SKWorkflowAgents(settings=settings, reader=reader).product_teardown(
             WorkflowInput(
                 value=request.product_name,
                 notes=request.notes,
                 limit=request.limit,
+                preflight=preflight,
             )
         )
     except ValueError as exc:
@@ -60,11 +64,13 @@ def framework_red_team(
     reader: RepoReader = Depends(get_repo_reader),
 ) -> dict:
     try:
+        preflight = canonical_preflight(reader)
         return SKWorkflowAgents(settings=settings, reader=reader).framework_red_team(
             WorkflowInput(
                 value=request.idea,
                 notes=request.notes,
                 limit=request.limit,
+                preflight=preflight,
             )
         )
     except ValueError as exc:
@@ -78,11 +84,13 @@ def article_publish_check(
     reader: RepoReader = Depends(get_repo_reader),
 ) -> dict:
     try:
+        preflight = canonical_preflight(reader)
         return SKWorkflowAgents(settings=settings, reader=reader).article_publish_check(
             WorkflowInput(
                 value=request.final_article,
                 notes=request.notes,
                 limit=request.limit,
+                preflight=preflight,
             )
         )
     except ValueError as exc:

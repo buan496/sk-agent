@@ -56,6 +56,7 @@ type SearchResponse = {
 type AskResponse = {
   status: string;
   answer?: string;
+  answer_markdown?: string;
   read_files?: ReadFileSummary[];
   citations?: Array<{
     file_path: string;
@@ -94,12 +95,27 @@ type StatusAuditResponse = {
 type AgentResponse = {
   status: string;
   agent?: string;
+  conclusion?: string;
   read_files?: ReadFileSummary[];
+  evidence?: unknown;
+  risks?: string[];
+  minimal_next_step?: string;
+  ingest_draft?: unknown;
+  answer_markdown?: string;
   answer?: string;
   llm?: { status?: string; provider?: string; model?: string; message?: string };
   ingest_recommendation?: Record<string, unknown>;
   search?: { count?: number; read_files?: string[] };
   detail?: string;
+};
+
+type AgentRunRecord = {
+  time: string;
+  agent: string;
+  input: string;
+  read_files: ReadFileSummary[];
+  risks: string[];
+  conclusion: string;
 };
 
 type PatchDraftResponse = {
@@ -135,7 +151,10 @@ type GraphStatusResponse = {
   relationship_count?: number;
   labels?: Array<{ label: string; count: number }> | Record<string, number>;
   relationship_types?: Array<{ type: string; count: number }> | Record<string, number>;
+  latest_index_run?: Record<string, unknown> | null;
+  graph_rebuild_time?: string | null;
   source_chunk_count?: number;
+  canonical_read_status?: Record<string, unknown>;
   detail?: string;
 };
 
@@ -206,6 +225,22 @@ function compact(value: unknown) {
   return JSON.stringify(value, null, 2);
 }
 
+function formatShanghaiTime(value?: string | null) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+}
+
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabKey>("home");
   const [health, setHealth] = useState<"ok" | "offline">("offline");
@@ -223,6 +258,7 @@ export default function Home() {
   const [agentInput, setAgentInput] = useState("Perplexity");
   const [agentNotes, setAgentNotes] = useState("");
   const [agentResult, setAgentResult] = useState<AgentResponse | null>(null);
+  const [agentRuns, setAgentRuns] = useState<AgentRunRecord[]>([]);
   const [patchTarget, setPatchTarget] = useState("cases/2026/example.md");
   const [patchIntent, setPatchIntent] = useState("新增轻量初拆文档");
   const [patchContent, setPatchContent] = useState("# Example\n\n正文内容");
@@ -338,7 +374,20 @@ export default function Home() {
         body: JSON.stringify(body),
       }),
     );
-    if (result) setAgentResult(result);
+    if (result) {
+      setAgentResult(result);
+      setAgentRuns((previous) => [
+        {
+          time: new Date().toISOString(),
+          agent: result.agent || agentMode,
+          input: agentInput,
+          read_files: result.read_files ?? [],
+          risks: result.risks ?? [],
+          conclusion: result.conclusion ?? "",
+        },
+        ...previous,
+      ].slice(0, 10));
+    }
   }
 
   async function runPatch(event: FormEvent) {
@@ -459,6 +508,10 @@ export default function Home() {
             setAskQuestion={setAskQuestion}
             askResult={askResult}
             runAsk={runAsk}
+            openFileFromSearch={async (path) => {
+              await readFile(path);
+              setActiveTab("files");
+            }}
           />
         )}
         {activeTab === "audit" && <AuditView result={auditResult} runAudit={runAudit} />}
@@ -471,6 +524,7 @@ export default function Home() {
             notes={agentNotes}
             setNotes={setAgentNotes}
             result={agentResult}
+            history={agentRuns}
             runAgent={runAgent}
           />
         )}
@@ -497,6 +551,10 @@ export default function Home() {
             refreshStatus={refreshGraphStatus}
             rebuildGraph={rebuildGraph}
             runQuery={runGraphQuery}
+            openFileFromGraph={async (path) => {
+              await readFile(path);
+              setActiveTab("files");
+            }}
           />
         )}
       </div>
@@ -590,7 +648,7 @@ function HomeView({
                   <td className="px-4 py-3">{statusText(item?.status ?? canonical?.status)}</td>
                   <td className="px-4 py-3 text-slate-600">{meta?.source ?? item?.source ?? "-"}</td>
                   <td className="px-4 py-3 text-slate-600">{meta ? `${meta.size} B` : "-"}</td>
-                  <td className="px-4 py-3 text-slate-600">{meta?.last_modified ?? "-"}</td>
+                  <td className="px-4 py-3 text-slate-600">{formatShanghaiTime(meta?.last_modified)}</td>
                 </tr>
               );
             })}
@@ -666,6 +724,7 @@ function SearchView({
   setAskQuestion,
   askResult,
   runAsk,
+  openFileFromSearch,
 }: {
   query: string;
   setQuery: (value: string) => void;
@@ -675,6 +734,7 @@ function SearchView({
   setAskQuestion: (value: string) => void;
   askResult: AskResponse | null;
   runAsk: (event?: FormEvent) => Promise<void>;
+  openFileFromSearch: (path: string) => Promise<void>;
 }) {
   return (
     <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
@@ -698,7 +758,7 @@ function SearchView({
             </button>
           ))}
         </div>
-        <ResultList result={result} />
+        <ResultList result={result} openFile={openFileFromSearch} />
       </section>
       <section>
         <form className="mb-3 flex gap-2" onSubmit={runAsk}>
@@ -708,7 +768,9 @@ function SearchView({
           </button>
         </form>
         <ReadFilesList files={askResult?.read_files ?? []} />
-        <pre className="code-block mt-3 min-h-80">{askResult?.answer || askResult?.detail || "尚未运行问答。"}</pre>
+        <pre className="code-block mt-3 min-h-80">
+          {askResult?.answer_markdown || askResult?.answer || askResult?.detail || "尚未运行问答。"}
+        </pre>
       </section>
     </div>
   );
@@ -758,6 +820,7 @@ function AgentsView({
   notes,
   setNotes,
   result,
+  history,
   runAgent,
 }: {
   mode: AgentMode;
@@ -767,6 +830,7 @@ function AgentsView({
   notes: string;
   setNotes: (value: string) => void;
   result: AgentResponse | null;
+  history: AgentRunRecord[];
   runAgent: (event: FormEvent) => Promise<void>;
 }) {
   const label = mode === "product-teardown" ? "产品名" : mode === "framework-red-team" ? "项目想法" : "文章终稿";
@@ -807,7 +871,18 @@ function AgentsView({
       <section className="min-w-0">
         <ResultHeader title={result?.agent || "Agent 输出"} status={result?.llm?.status || result?.status} />
         <ReadFilesList files={result?.read_files ?? []} />
-        <pre className="code-block mt-3 min-h-[520px]">{result?.answer || result?.detail || "尚未运行 Agent。"}</pre>
+        <KeyValue
+          rows={[
+            ["结论", result?.conclusion],
+            ["风险", result?.risks],
+            ["最小下一步", result?.minimal_next_step],
+            ["入库稿", result?.ingest_draft],
+          ]}
+        />
+        <pre className="code-block mt-3 min-h-[360px]">
+          {result?.answer_markdown || result?.answer || result?.detail || "尚未运行 Agent。"}
+        </pre>
+        <AgentHistory records={history} />
       </section>
     </div>
   );
@@ -871,6 +946,7 @@ function GraphView({
   refreshStatus,
   rebuildGraph,
   runQuery,
+  openFileFromGraph,
 }: {
   status: GraphStatusResponse | null;
   queryKind: GraphQueryKind;
@@ -881,31 +957,14 @@ function GraphView({
   refreshStatus: () => Promise<void>;
   rebuildGraph: () => Promise<void>;
   runQuery: (event?: FormEvent) => Promise<void>;
+  openFileFromGraph: (path: string) => Promise<void>;
 }) {
   const needsInput = queryKind === "fm015" || queryKind === "framework";
   const placeholder = queryKind === "fm015" ? "FM015" : "诊断空白";
   return (
     <div className="grid gap-5 lg:grid-cols-[420px_1fr]">
       <section>
-        <div className="mb-4 grid grid-cols-2 gap-2">
-          <button className="secondary-button" type="button" onClick={refreshStatus}>
-            图谱状态
-          </button>
-          <button className="primary-button" type="button" onClick={rebuildGraph}>
-            重建图谱
-          </button>
-        </div>
-        <KeyValue
-          rows={[
-            ["状态", status?.status],
-            ["chunk", status?.source_chunk_count],
-            ["节点", status?.node_count],
-            ["关系", status?.relationship_count],
-            ["节点类型", status?.labels],
-            ["关系类型", status?.relationship_types],
-          ]}
-        />
-        <form className="space-y-3" onSubmit={runQuery}>
+        <form className="mb-4 space-y-3 rounded-md border border-line bg-white p-4" onSubmit={runQuery}>
           <label className="block text-sm font-medium">验收查询</label>
           <select
             className="field"
@@ -934,16 +993,132 @@ function GraphView({
             查询图谱
           </button>
         </form>
+        <div className="mb-4 grid grid-cols-2 gap-2">
+          <button className="secondary-button" type="button" onClick={refreshStatus}>
+            图谱状态
+          </button>
+          <button className="primary-button" type="button" onClick={rebuildGraph}>
+            重建图谱
+          </button>
+        </div>
+        <KeyValue
+          rows={[
+            ["状态", status?.status],
+            ["chunk", status?.source_chunk_count],
+            ["latest_index_run", status?.latest_index_run],
+            ["graph_rebuild_time", status?.graph_rebuild_time],
+            ["canonical", status?.canonical_read_status],
+            ["节点", status?.node_count],
+            ["关系", status?.relationship_count],
+            ["节点类型", status?.labels],
+            ["关系类型", status?.relationship_types],
+          ]}
+        />
       </section>
       <section className="min-w-0">
         <ResultHeader title={result?.query || "图谱查询结果"} status={result?.status} />
         <KeyValue rows={[["结果数", result?.count]]} />
-        <pre className="code-block min-h-[520px]">
-          {result ? JSON.stringify(result.results, null, 2) : "尚未查询图谱。"}
-        </pre>
+        <GraphReadableResults kind={queryKind} result={result} openFile={openFileFromGraph} />
       </section>
     </div>
   );
+}
+
+function GraphReadableResults({
+  kind,
+  result,
+  openFile,
+}: {
+  kind: GraphQueryKind;
+  result: GraphQueryResponse | null;
+  openFile: (path: string) => Promise<void>;
+}) {
+  if (!result) {
+    return <div className="rounded-md border border-line bg-white p-4 text-sm">尚未查询图谱。</div>;
+  }
+  if (!result.results.length) {
+    return <div className="rounded-md border border-line bg-white p-4 text-sm">没有查到结果。</div>;
+  }
+  return (
+    <div className="space-y-3">
+      {result.results.map((row, index) => (
+        <GraphResultCard key={index} kind={kind} row={row} openFile={openFile} />
+      ))}
+    </div>
+  );
+}
+
+function GraphResultCard({
+  kind,
+  row,
+  openFile,
+}: {
+  kind: GraphQueryKind;
+  row: Record<string, unknown>;
+  openFile: (path: string) => Promise<void>;
+}) {
+  const title = graphResultTitle(kind, row);
+  const details = graphResultDetails(kind, row);
+  const filePath = typeof row.file_path === "string" ? row.file_path : "";
+  return (
+    <div className="rounded-md border border-line bg-white p-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="text-base font-semibold">{title}</div>
+        {filePath && (
+          <button className="secondary-button shrink-0" type="button" onClick={() => void openFile(filePath)}>
+            阅读文件
+          </button>
+        )}
+      </div>
+      <div className="mt-3 space-y-2 text-sm text-slate-700">
+        {details.map(([label, value]) => (
+          <div key={label} className="grid gap-1 sm:grid-cols-[96px_1fr]">
+            <div className="font-medium text-slate-500">{label}</div>
+            <div className="min-w-0 break-words">{value}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function graphResultTitle(kind: GraphQueryKind, row: Record<string, unknown>) {
+  if (kind === "fm015") return String(row.case_id || row.title || "案例");
+  if (kind === "framework") return String(row.article_id || row.title || "文章");
+  if (kind === "tools") return String(row.product || row.product_id || "产品");
+  return String(row.theory || row.theory_id || "理论");
+}
+
+function graphResultDetails(kind: GraphQueryKind, row: Record<string, unknown>): Array<[string, string]> {
+  if (kind === "fm015") {
+    return [
+      ["标题", stringValue(row.title)],
+      ["文件", stringValue(row.file_path)],
+      ["行号", stringValue(row.line)],
+    ];
+  }
+  if (kind === "framework") {
+    return [
+      ["标题", stringValue(row.title)],
+      ["框架", stringValue(row.framework)],
+      ["文件", stringValue(row.file_path)],
+    ];
+  }
+  if (kind === "tools") {
+    return [
+      ["判断", stringValue(row.decision)],
+      ["文件", stringValue(row.file_path)],
+    ];
+  }
+  return [
+    ["案例数", stringValue(row.case_count)],
+    ["案例", Array.isArray(row.cases) ? row.cases.join("、") : stringValue(row.cases)],
+  ];
+}
+
+function stringValue(value: unknown) {
+  if (value === null || value === undefined || value === "") return "-";
+  return String(value);
 }
 
 function ResultHeader({ title, status }: { title: string; status?: string }) {
@@ -955,14 +1130,21 @@ function ResultHeader({ title, status }: { title: string; status?: string }) {
   );
 }
 
-function ResultList({ result }: { result: SearchResponse | null }) {
+function ResultList({ result, openFile }: { result: SearchResponse | null; openFile: (path: string) => Promise<void> }) {
   return (
     <div className="space-y-3">
       {(result?.results ?? []).map((hit) => (
         <div key={`${hit.file_path}-${hit.start_line}`} className="rounded-md border border-line bg-white p-4">
-          <div className="text-sm font-semibold">{hit.file_path}</div>
-          <div className="mt-1 text-xs text-slate-500">
-            {hit.start_line}-{hit.end_line} · score {hit.total_score}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="text-sm font-semibold">{hit.file_path}</div>
+              <div className="mt-1 text-xs text-slate-500">
+                {hit.start_line}-{hit.end_line} 行 / score {hit.total_score}
+              </div>
+            </div>
+            <button className="secondary-button shrink-0" type="button" onClick={() => void openFile(hit.file_path)}>
+              阅读文件
+            </button>
           </div>
           {hit.heading && <div className="mt-2 text-sm font-medium">{hit.heading}</div>}
           <p className="mt-2 text-sm leading-6 text-slate-700">{hit.excerpt}</p>
@@ -984,6 +1166,30 @@ function ReadFilesList({ files }: { files: ReadFileSummary[] }) {
             <div className="font-medium">{file.path}</div>
             <div className="text-xs text-slate-500">
               {statusText(file.status)} / {file.source || "unknown"}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AgentHistory({ records }: { records: AgentRunRecord[] }) {
+  if (!records.length) return null;
+  return (
+    <div className="mt-4 rounded-md border border-line bg-white">
+      <div className="border-b border-line px-3 py-2 text-sm font-semibold">最近 Agent 执行记录</div>
+      <div className="max-h-72 overflow-auto">
+        {records.map((record, index) => (
+          <div key={`${record.time}-${index}`} className="border-b border-line px-3 py-3 text-sm last:border-0">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-semibold">{record.agent}</span>
+              <span className="text-xs text-slate-500">{new Date(record.time).toLocaleString()}</span>
+            </div>
+            <div className="mt-1 line-clamp-2 text-slate-700">{record.input}</div>
+            <div className="mt-2 text-slate-700">结论：{record.conclusion || "-"}</div>
+            <div className="mt-1 text-xs text-slate-500">
+              读取 {record.read_files.length} 个文件 / 风险 {record.risks.length} 项
             </div>
           </div>
         ))}

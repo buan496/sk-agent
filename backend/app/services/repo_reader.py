@@ -3,16 +3,18 @@ from __future__ import annotations
 import base64
 import json
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
+from zoneinfo import ZoneInfo
 
 from app.config import CANONICAL_FILES, Settings
 
 
+SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
 UNREAD_MESSAGE = "本次未读取到，文件未读取到不等于文件不存在"
 NOT_CONFIGURED_MESSAGE = "请配置 LOCAL_REPO_PATH，或配置 GITHUB_RAW_BASE_URL / GITHUB_REPO"
 SKIP_DIRS = {".git", ".hg", ".svn", ".venv", "venv", "node_modules", "__pycache__"}
@@ -299,4 +301,4 @@ class RepoReader:
         return str(pure_path)
 
     def _format_timestamp(self, value: float) -> str:
-        return datetime.fromtimestamp(value, tz=timezone.utc).isoformat()
+        return datetime.fromtimestamp(value, tz=SHANGHAI_TZ).isoformat(timespec="seconds")

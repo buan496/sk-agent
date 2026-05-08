@@ -34,15 +34,25 @@ class StatusAuditor:
     def __init__(self, reader: RepoReader) -> None:
         self.reader = reader
 
-    def audit(self) -> dict[str, Any]:
-        canonical = self.reader.read_canonical_files()
-        read_files = [
-            _read_file_summary(item)
-            for item in canonical.get("files", [])
-        ]
+    def audit(self, preflight: dict[str, Any] | None = None) -> dict[str, Any]:
+        if preflight is None:
+            canonical = self.reader.read_canonical_files()
+            read_files = [_read_file_summary(item) for item in canonical.get("files", [])]
+        else:
+            canonical = {
+                "status": preflight.get("status"),
+                "files": [],
+            }
+            read_files = preflight.get("read_files", [])
+
+        canonical_files = (
+            self.reader.read_canonical_files()
+            if preflight is not None
+            else canonical
+        )
         contents = {
             item.get("path"): item.get("content") or ""
-            for item in canonical.get("files", [])
+            for item in canonical_files.get("files", [])
             if item.get("status") == "ok"
         }
 
@@ -76,10 +86,32 @@ class StatusAuditor:
         conflicts.extend(_check_cards_missing_article_published(cards))
 
         risk_level = _overall_risk(conflicts)
+        conclusion = _conclusion(conflicts)
+        minimal_fix_plan = _minimal_fix_plan(conflicts)
+        conflict_dicts = [conflict.to_dict() for conflict in conflicts]
+        answer_markdown = _answer_markdown(
+            conclusion=conclusion,
+            read_files=read_files,
+            risk_level=risk_level,
+            minimal_fix_plan=minimal_fix_plan,
+        )
         return {
             "status": "ok",
-            "conclusion": _conclusion(conflicts),
+            "conclusion": conclusion,
             "read_files": read_files,
+            "evidence": conflict_dicts,
+            "risks": [conflict.message for conflict in conflicts] or ["未发现明确状态冲突。"],
+            "minimal_next_step": minimal_fix_plan[0] if minimal_fix_plan else "无需修复。",
+            "ingest_draft": {
+                "required": bool(conflicts),
+                "reason": "状态审计只生成最小修复建议，不直接写仓库。",
+                "suggested_files": _unique_file_list(
+                    file_path
+                    for conflict in conflicts
+                    for file_path in conflict.suggested_files
+                ),
+            },
+            "answer_markdown": answer_markdown,
             "summary": {
                 "readme_article_count": len(readme_status),
                 "status_table_article_count": len(status_table_status),
@@ -88,9 +120,9 @@ class StatusAuditor:
                 "conflict_count": len(conflicts),
                 "risk_level": risk_level,
             },
-            "conflicts": [conflict.to_dict() for conflict in conflicts],
+            "conflicts": conflict_dicts,
             "risk_level": risk_level,
-            "minimal_fix_plan": _minimal_fix_plan(conflicts),
+            "minimal_fix_plan": minimal_fix_plan,
             "suggested_files": _unique_file_list(
                 file_path
                 for conflict in conflicts
@@ -369,6 +401,34 @@ def _codex_instruction(conflicts: list[AuditConflict]) -> str:
     return (
         "请先读取以下文件的当前内容，再按 minimal_fix_plan 做最小修改草稿，"
         f"不要直接写 GitHub：{files}"
+    )
+
+
+def _answer_markdown(
+    conclusion: str,
+    read_files: list[dict[str, Any]],
+    risk_level: str,
+    minimal_fix_plan: list[str],
+) -> str:
+    read_file_lines = [
+        f"- {item.get('path')}：{item.get('status')} / {item.get('source') or 'unknown'}"
+        for item in read_files
+    ]
+    fix_lines = [f"- {item}" for item in minimal_fix_plan]
+    return "\n".join(
+        [
+            "## 结论",
+            conclusion,
+            "",
+            "## 已读取文件",
+            *(read_file_lines or ["- 无"]),
+            "",
+            "## 风险",
+            f"- {risk_level}",
+            "",
+            "## 最小下一步",
+            *(fix_lines or ["- 无需修复。"]),
+        ]
     )
 
 

@@ -45,6 +45,10 @@ services:
       GITHUB_BRANCH: ${GITHUB_BRANCH:-main}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       GITHUB_RAW_BASE_URL: ${GITHUB_RAW_BASE_URL:-}
+      SK_REPO_URL: ${SK_REPO_URL:-https://github.com/MRYGP/SK.git}
+      SKGPT_REPO_URL: ${SKGPT_REPO_URL:-}
+      SK_REPO_LOCAL_PATH: ${SK_REPO_LOCAL_PATH:-}
+      SKGPT_REPO_LOCAL_PATH: ${SKGPT_REPO_LOCAL_PATH:-}
       REPO_SYNC_URL: ${REPO_SYNC_URL:-https://github.com/MRYGP/SK.git}
       REPO_SYNC_PATH: ${REPO_SYNC_PATH:-/repo-cache/SK}
       POSTGRES_HOST: db

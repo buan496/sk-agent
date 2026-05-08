@@ -100,6 +100,7 @@ class GraphBuilder:
                         _write_node(session, node)
                     for relationship in graph["relationships"]:
                         _write_relationship(session, relationship)
+                    _write_graph_meta(session, source_chunk_count=len(rows))
             except (Neo4jError, ServiceUnavailable) as exc:
                 raise GraphUnavailableError(f"Neo4j unavailable: {exc}") from exc
 
@@ -116,11 +117,14 @@ class GraphBuilder:
         with self._driver() as driver:
             try:
                 with driver.session() as session:
-                    node_count = session.run("MATCH (n) RETURN count(n) AS count").single()["count"]
+                    node_count = session.run(
+                        "MATCH (n) WHERE NOT n:GraphMeta RETURN count(n) AS count"
+                    ).single()["count"]
                     relationship_count = session.run("MATCH ()-[r]->() RETURN count(r) AS count").single()["count"]
                     labels = session.run(
                         """
                         MATCH (n)
+                        WHERE NOT n:GraphMeta
                         UNWIND labels(n) AS label
                         RETURN label, count(*) AS count
                         ORDER BY label
@@ -133,6 +137,13 @@ class GraphBuilder:
                         ORDER BY type
                         """
                     ).data()
+                    meta = session.run(
+                        """
+                        MATCH (m:GraphMeta {id: 'latest'})
+                        RETURN toString(m.rebuilt_at) AS graph_rebuild_time,
+                               m.source_chunk_count AS source_chunk_count
+                        """
+                    ).single()
             except (Neo4jError, ServiceUnavailable) as exc:
                 raise GraphUnavailableError(f"Neo4j unavailable: {exc}") from exc
         return {
@@ -141,6 +152,9 @@ class GraphBuilder:
             "relationship_count": relationship_count,
             "labels": labels,
             "relationship_types": rel_types,
+            "latest_index_run": _latest_index_run(),
+            "graph_rebuild_time": meta["graph_rebuild_time"] if meta else None,
+            "source_chunk_count": meta["source_chunk_count"] if meta else None,
         }
 
     def cases_for_failure_mode(self, code: str) -> dict[str, Any]:
@@ -374,6 +388,36 @@ def _write_relationship(session, relationship: GraphRelationship) -> None:
             "properties": relationship.properties,
         },
     ).consume()
+
+
+def _write_graph_meta(session, source_chunk_count: int) -> None:
+    session.run(
+        """
+        MERGE (m:GraphMeta {id: 'latest'})
+        SET m.rebuilt_at = datetime(),
+            m.source_chunk_count = $source_chunk_count
+        """,
+        {"source_chunk_count": source_chunk_count},
+    ).consume()
+
+
+def _latest_index_run() -> dict[str, Any] | None:
+    ensure_schema()
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT id, status, started_at, finished_at, source,
+                       total_files, indexed_files, chunk_count, error_message
+                FROM index_runs
+                ORDER BY id DESC
+                LIMIT 1;
+                """
+            )
+            row = cursor.fetchone()
+    if not row:
+        return None
+    return dict(row)
 
 
 def _add_node(nodes: dict[tuple[str, str], GraphNode], node: GraphNode) -> None:

@@ -37,6 +37,28 @@ Docker Compose 运行时，宿主机 SK 仓库通过 `SK_REPO_PATH` 只读挂载
 后端环境变量：LOCAL_REPO_PATH=/sk-repo
 ```
 
+## SK / SKGPT 双仓边界
+
+SK 与 SKGPT 是两个职责不同的仓库，不能混作同一个内容源：
+
+- SK：内容、案例、状态、方法论。
+- SKGPT：Project Instructions、GPTS 配置、上传清单、现读协议。
+
+SK Agent 的内容索引只面向 SK 仓库。`SKGPT_REPO_URL` 与 `SKGPT_REPO_LOCAL_PATH` 只用于后续读取配置/协议，不进入 SK 内容索引。当前 `indexer.py` 会跳过常见 SKGPT 配置目录，避免把 GPTS 配置误当作 SK 内容材料。
+
+## Canonical Preflight
+
+回答型接口必须先执行 canonical preflight，再输出判断：
+
+```text
+README.md
+ops/执行状态总表.md
+cases/2026/case-index.md
+cases/2026/case-cards.md
+```
+
+如果某个文件本次没有读取到，系统只能标记“本次未读取到”，不能推断为文件不存在。
+
 ## API
 
 ```text
@@ -131,3 +153,9 @@ MINIMAX_CHAT_MODEL=MiniMax-M2.7
 
 - `patch_writer.py`
 - `/patch/draft`
+
+## 图谱边界
+
+Graph is advisory only. Canonical files override graph memory.
+
+图数据库只做关系辅助层，用来回答跨案例、跨框架、跨文章的关系问题。状态判断、发布判断、入库判断仍以 canonical preflight 读取到的 SK 当前文件为准。

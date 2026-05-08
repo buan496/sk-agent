@@ -271,3 +271,36 @@
 - [x] 可查询：诊断空白框架出现在哪些文章
 - [x] 可查询：哪些产品被判为“工具”
 - [x] 可查询：哪些理论被多个案例引用
+
+## 第 8.5 期：规约收口与双仓边界
+
+状态：完成。
+
+- [x] 新增统一 `canonical_preflight()`
+- [x] `/ask` 接入 canonical preflight
+- [x] `/agents/status-audit` 接入 canonical preflight
+- [x] `/agents/product-teardown` 接入 canonical preflight
+- [x] `/agents/framework-red-team` 接入 canonical preflight
+- [x] `/agents/article-publish-check` 接入 canonical preflight
+- [x] Agent 输出包含 `conclusion`
+- [x] Agent 输出包含 `read_files`
+- [x] Agent 输出包含 `evidence`
+- [x] Agent 输出包含 `risks`
+- [x] Agent 输出包含 `minimal_next_step`
+- [x] Agent 输出包含 `ingest_draft`
+- [x] Agent 输出包含 `answer_markdown`
+- [x] `.env.example` 增加 SK / SKGPT 双仓变量
+- [x] 文档说明 SK / SKGPT 双仓边界
+- [x] SKGPT 配置目录不进入 SK 内容索引
+- [x] `/graph/status` 增加图谱新鲜度字段
+- [x] 文档注明 Graph is advisory only
+- [x] 前端保存最近 10 次 Agent 执行记录
+- [x] 不实现自动 commit
+- [x] 不实现自动 PR
+- [x] 不新增 Agent
+- [x] 不修改 SK 仓库内容
+
+验收：
+- [x] 后端 Docker 测试通过：`33 passed`
+- [x] 前端 Docker 构建通过：`docker compose run --rm frontend npm run build`
+- [x] 输出 `docs/phase-8-5-compliance.md`
