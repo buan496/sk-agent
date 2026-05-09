@@ -19,6 +19,8 @@ class RoleRunRequest(BaseModel):
     preferred_role: str | None = None
     allow_web: bool = False
     web_queries: list[str] = Field(default_factory=list)
+    conversation_id: str | None = None
+    read_sources: bool = False
 
 
 @router.get("")
@@ -43,6 +45,8 @@ def run_role(
             preferred_role=request.preferred_role,
             allow_web=request.allow_web,
             web_queries=request.web_queries,
+            conversation_id=request.conversation_id,
+            read_sources=request.read_sources,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

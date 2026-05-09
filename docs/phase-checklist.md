@@ -446,3 +446,81 @@
 
 验收：
 - [x] 后端 Docker 测试通过：`58 passed`
+
+## 第 9.3c 期：Search Query Expansion
+
+状态：完成第一版。
+
+- [x] 新增 `backend/app/services/query_expander.py`
+- [x] `deep_researcher_role` 默认扩展 Hippocratic AI / startup / healthcare / founder / funding
+- [x] `product_teardown_role` 默认扩展 pricing / revenue / funding / competitors / reviews reddit
+- [x] `article_publish_check_role` 默认扩展 latest / official / announcement
+- [x] 显式 `web_queries` 优先，不自动扩展
+- [x] `/roles/run` 新增 `expanded_queries`
+- [x] 前端显示“实际搜索词”
+- [x] 新增 `docs/phase-9-3c-query-expansion.md`
+
+验收：
+- [x] 后端 Docker 测试通过：`63 passed`
+- [x] 前端 Docker 构建通过：`docker compose run --rm frontend npm run build`
+
+## 第 9.3d 期：Source Type Classifier 优化
+
+状态：完成第一版。
+
+- [x] 新增 `backend/app/services/source_classifier.py`
+- [x] 支持 `official`
+- [x] 支持 `app_store`
+- [x] 支持 `company_profile`
+- [x] 支持 `media`
+- [x] 支持 `community`
+- [x] 支持 `unknown`
+- [x] 搜索结果新增 `source_reason`
+- [x] evidence candidate 规则扩展到 app store / company profile / announcement wire
+- [x] deep_research_role 根据已有来源调整缺失证据
+- [x] 前端候选来源显示 source_type / evidence_level / source_reason / url
+- [x] 新增 `docs/phase-9-3d-source-classifier.md`
+
+验收：
+- [x] 后端 Docker 测试通过：`68 passed`
+- [x] 前端 Docker 构建通过：`docker compose run --rm frontend npm run build`
+
+## 第 9.3e 期：Conversation Context Carryover
+
+状态：完成第一版。
+
+- [x] 新增 `backend/app/services/conversation_intent.py`
+- [x] `/roles/run` 增加 `conversation_id`
+- [x] 识别“基于以上 / 继续 / 刚才”等承接型指令
+- [x] 承接型指令不自动生成新 web query
+- [x] 承接型指令不自动调用 web_search
+- [x] 可继承上一轮 `internal_role_runs.structured_output`
+- [x] deep_research_role 可基于上一轮 evidence_ledger 输出整理报告
+- [x] 输出 `context_used / carryover_intent / inherited_sources_count / new_web_search_performed`
+- [x] 前端显示上下文继承状态
+- [x] 新增 `docs/phase-9-3e-conversation-carryover.md`
+
+验收：
+- [x] 后端 Docker 测试通过：`71 passed`
+- [x] 前端 Docker 构建通过：`docker compose run --rm frontend npm run build`
+
+## 第 9.4 期：Source Reader 来源正文读取
+
+状态：完成第一版。
+
+- [x] 新增 `backend/app/services/source_reader.py`
+- [x] 新增 `POST /web/read-source`
+- [x] 支持 `official`
+- [x] 支持 `app_store`
+- [x] 支持 `company_profile`
+- [x] 支持 `media`
+- [x] deep_research_role 支持 `read_sources`
+- [x] 输出 `source_reading_used / read_sources_count`
+- [x] 输出 `extracted_facts / candidate_claims / source_quotes`
+- [x] 前端候选来源增加“读取正文”按钮
+- [x] 新增 `docs/phase-9-4-source-reader.md`
+- [x] 不自动入库 / 不自动写案例卡 / 不自动 commit / PR
+
+验收：
+- [x] 后端 Docker 测试通过：`75 passed`
+- [x] 前端 Docker 构建通过：`docker compose run --rm frontend npm run build`

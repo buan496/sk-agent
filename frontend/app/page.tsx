@@ -237,7 +237,17 @@ type RoleRunResponse = {
   structured_output: Record<string, unknown>;
   web_used?: boolean;
   web_queries?: string[];
+  expanded_queries?: string[];
   web_results_count?: number;
+  context_used?: boolean;
+  carryover_intent?: boolean;
+  inherited_sources_count?: number;
+  new_web_search_performed?: boolean;
+  source_reading_used?: boolean;
+  read_sources_count?: number;
+  extracted_facts?: unknown[];
+  candidate_claims?: unknown[];
+  source_quotes?: unknown[];
   evidence_ledger?: unknown[];
   missing_evidence?: unknown[];
   warnings?: string[];
@@ -264,7 +274,20 @@ type RoleRunForm = {
   notes: string;
   preferred_role: string;
   allow_web: boolean;
+  read_sources: boolean;
   web_queries: string;
+};
+
+type SourceReadResult = {
+  status: string;
+  url: string;
+  source_type: string;
+  title: string;
+  clean_text: string;
+  metadata: Record<string, unknown>;
+  extracted_facts: string[];
+  candidate_claims: unknown[];
+  source_quotes: string[];
 };
 
 type TabKey = "home" | "files" | "search" | "audit" | "agents" | "patch" | "graph" | "memory";
@@ -358,7 +381,8 @@ function bulletList(value: unknown, fallback = "-") {
           const url = record.source_url || record.url;
           const sourceType = record.source_type || "unknown";
           const level = record.evidence_level || "candidate";
-          return url ? `${title}（${sourceType}，${level}）\n${url}` : `${title}（${sourceType}，${level}）`;
+          const reason = record.source_reason ? `\n原因：${record.source_reason}` : "";
+          return url ? `${title}\n类型：${sourceType} / 等级：${level}${reason}\n${url}` : `${title}\n类型：${sourceType} / 等级：${level}${reason}`;
         }
         return String(item);
       })
@@ -366,6 +390,24 @@ function bulletList(value: unknown, fallback = "-") {
     return lines.length ? lines.map((line) => `- ${line}`).join("\n") : fallback;
   }
   return compact(value);
+}
+
+function evidenceItems(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const record = item as Record<string, unknown>;
+      const url = String(record.source_url || record.url || "");
+      if (!url) return null;
+      return {
+        title: String(record.source_title || record.title || record.claim || "候选来源"),
+        url,
+        source_type: String(record.source_type || "unknown"),
+        evidence_level: String(record.evidence_level || "candidate"),
+      };
+    })
+    .filter((item): item is { title: string; url: string; source_type: string; evidence_level: string } => Boolean(item));
 }
 
 function formatShanghaiTime(value?: string | null) {
@@ -430,12 +472,14 @@ export default function Home() {
   const [roleList, setRoleList] = useState<RoleListResponse | null>(null);
   const [roleRuns, setRoleRuns] = useState<InternalRoleRunsResponse | null>(null);
   const [roleResult, setRoleResult] = useState<RoleRunResponse | null>(null);
+  const [roleConversationId, setRoleConversationId] = useState<string>("");
   const [roleRunForm, setRoleRunForm] = useState<RoleRunForm>({
     task_type: "deep_research",
     input: "研究一个产品是否值得进入 SK。",
     notes: "",
     preferred_role: "",
     allow_web: false,
+    read_sources: false,
     web_queries: "",
   });
   const [busy, setBusy] = useState<string>("");
@@ -658,6 +702,8 @@ export default function Home() {
           notes: roleRunForm.notes,
           preferred_role: roleRunForm.preferred_role || null,
           allow_web: roleRunForm.allow_web,
+          read_sources: roleRunForm.read_sources,
+          conversation_id: roleConversationId || null,
           web_queries: roleRunForm.web_queries
             .split("\n")
             .map((item) => item.trim())
@@ -667,6 +713,7 @@ export default function Home() {
     );
     if (result) {
       setRoleResult(result);
+      if (result.run_id) setRoleConversationId(String(result.run_id));
       await loadRoleRuns();
     }
   }
@@ -1606,6 +1653,21 @@ function InternalRolesView({
   loadRuns: () => Promise<void>;
   runRole: (event: FormEvent) => Promise<void>;
 }) {
+  const [sourceReadResult, setSourceReadResult] = useState<SourceReadResult | null>(null);
+  const [sourceReadBusy, setSourceReadBusy] = useState<string>("");
+  async function readCandidateSource(url: string, sourceType: string) {
+    setSourceReadBusy(url);
+    try {
+      const result = await fetchJson<SourceReadResult>("/web/read-source", {
+        method: "POST",
+        body: JSON.stringify({ url, source_type: sourceType, max_chars: 12000 }),
+      });
+      setSourceReadResult(result);
+    } finally {
+      setSourceReadBusy("");
+    }
+  }
+  const candidateSources = evidenceItems(result?.evidence_ledger || result?.structured_output?.evidence_ledger);
   return (
     <div className="grid gap-5 lg:grid-cols-[420px_1fr]">
       <section>
@@ -1655,6 +1717,14 @@ function InternalRolesView({
             />
             允许联网补证据
           </label>
+          <label className="flex items-center gap-2 rounded-md border border-line bg-panel px-3 py-2 text-sm">
+            <input
+              type="checkbox"
+              checked={form.read_sources}
+              onChange={(event) => setForm({ ...form, read_sources: event.target.checked })}
+            />
+            联网后读取重点来源正文
+          </label>
           <textarea
             className="field min-h-24"
             placeholder="可选：每行一个搜索词；留空则由角色自动生成"
@@ -1685,7 +1755,13 @@ function InternalRolesView({
           rows={[
             ["结论", result?.conclusion],
             ["是否联网", result ? (result.web_used ? "是" : "否") : undefined],
+            ["是否使用上一轮上下文", result ? (result.context_used ? "是" : "否") : undefined],
+            ["是否重新联网", result ? (result.new_web_search_performed ? "是" : "否") : undefined],
+            ["继承来源数量", result?.inherited_sources_count],
+            ["是否读取正文", result ? (result.source_reading_used ? "是" : "否") : undefined],
+            ["读取正文数量", result?.read_sources_count],
             ["候选来源", bulletList(result?.evidence_ledger || result?.structured_output?.evidence_ledger, "暂未找到候选来源。")],
+            ["正文提取事实", bulletList(result?.extracted_facts || result?.structured_output?.extracted_facts, "暂未读取正文。")],
             ["缺失证据", bulletList(result?.missing_evidence || result?.structured_output?.missing_evidence, "暂未列出缺失证据。")],
             ["风险", bulletList(result?.risks, "暂未发现额外风险。")],
             ["最小下一步", result?.minimal_next_step],
@@ -1694,12 +1770,48 @@ function InternalRolesView({
         <pre className="code-block mt-3 min-h-72">
           {result?.human_readable_markdown || result?.answer_markdown || "尚未运行内部角色。"}
         </pre>
+        {candidateSources.length > 0 && (
+          <Section title="候选来源正文读取">
+            <div className="space-y-2">
+              {candidateSources.map((source) => (
+                <div key={`${source.url}-${source.title}`} className="rounded-md border border-line bg-white p-3 text-sm">
+                  <div className="font-semibold">{source.title}</div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    {source.source_type} / {source.evidence_level}
+                  </div>
+                  <button
+                    className="secondary-button mt-2"
+                    type="button"
+                    onClick={() => readCandidateSource(source.url, source.source_type)}
+                    disabled={sourceReadBusy === source.url}
+                  >
+                    {sourceReadBusy === source.url ? "读取中..." : "读取正文"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </Section>
+        )}
+        {sourceReadResult && (
+          <Section title="来源正文">
+            <KeyValue
+              rows={[
+                ["标题", sourceReadResult.title],
+                ["状态", sourceReadResult.status],
+                ["元数据", sourceReadResult.metadata],
+                ["提取事实", sourceReadResult.extracted_facts],
+              ]}
+            />
+            <pre className="code-block mt-3 max-h-96 overflow-auto">{sourceReadResult.clean_text || "未读取到正文。"}</pre>
+          </Section>
+        )}
         {result && (
           <details className="mt-3 rounded-md border border-line bg-white p-3 text-sm">
             <summary className="cursor-pointer font-semibold">查看结构化输出</summary>
             <KeyValue
               rows={[
-                ["搜索词", result.web_queries],
+                ["实际搜索词", result.expanded_queries || result.web_queries],
+                ["用户输入搜索词", result.web_queries],
                 ["warnings", result.warnings],
                 ["结构化输出", result.structured_output],
               ]}

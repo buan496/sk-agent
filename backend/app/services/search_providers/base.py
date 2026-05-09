@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 
 
 SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
-SOURCE_TYPES = {"official", "media", "community", "unknown"}
+SOURCE_TYPES = {"official", "app_store", "company_profile", "media", "community", "unknown"}
 
 
 @dataclass(frozen=True)
@@ -16,6 +16,7 @@ class SearchResult:
     url: str
     snippet: str
     source_type: str
+    source_reason: str
     fetched_at: str
     provider: str
 

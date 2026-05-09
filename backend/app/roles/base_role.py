@@ -14,8 +14,16 @@ class RoleContext:
     task_type: str
     allow_web: bool = False
     web_queries: list[str] | None = None
+    expanded_queries: list[str] | None = None
     web_results: list[dict[str, Any]] | None = None
     web_warnings: list[str] | None = None
+    carryover_intent: bool = False
+    carryover_context: dict[str, Any] | None = None
+    context_used: bool = False
+    inherited_sources_count: int = 0
+    new_web_search_performed: bool = False
+    read_sources: bool = False
+    source_readings: list[dict[str, Any]] | None = None
 
 
 class BaseRole:
@@ -81,9 +89,19 @@ class BaseRole:
             "structured_output": structured_output,
             "web_used": bool(context.web_results),
             "web_queries": context.web_queries or [],
+            "expanded_queries": context.expanded_queries or context.web_queries or [],
             "web_results_count": len(context.web_results or []),
+            "context_used": context.context_used,
+            "carryover_intent": context.carryover_intent,
+            "inherited_sources_count": context.inherited_sources_count,
+            "new_web_search_performed": context.new_web_search_performed,
+            "source_reading_used": bool(context.source_readings),
+            "read_sources_count": len(context.source_readings or []),
             "evidence_ledger": structured_output.get("evidence_ledger", []),
             "missing_evidence": structured_output.get("missing_evidence", []),
+            "extracted_facts": structured_output.get("extracted_facts", []),
+            "candidate_claims": structured_output.get("candidate_claims", []),
+            "source_quotes": structured_output.get("source_quotes", []),
             "warnings": context.web_warnings or structured_output.get("warnings", []),
             "should_ingest": should_ingest,
             "ingested": ingested,
@@ -139,12 +157,13 @@ def _human_found_information(structured_output: dict[str, Any], evidence: Any) -
             title = entry.get("source_title") or entry.get("title") or "未命名来源"
             url = entry.get("source_url") or entry.get("url") or ""
             source_type = entry.get("source_type") or "unknown"
+            source_reason = entry.get("source_reason") or "unclassified source"
             level = entry.get("evidence_level") or "candidate"
             if url:
-                items.append(f"{title}（{source_type}，{level}）：{url}")
+                items.append(f"{title}（{source_type}，{level}，{source_reason}）：{url}")
             else:
                 note = entry.get("note") or "暂未找到可引用来源。"
-                items.append(f"{title}（{source_type}，{level}）：{note}")
+                items.append(f"{title}（{source_type}，{level}，{source_reason}）：{note}")
     duplicate = structured_output.get("duplicate_check")
     if isinstance(duplicate, dict):
         status = duplicate.get("status") or "unknown"

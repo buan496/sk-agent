@@ -9,7 +9,10 @@ from app.db import ensure_schema, get_connection
 from app.roles.base_role import RoleContext
 from app.roles.role_registry import role_registry
 from app.services.canonical_preflight import canonical_preflight
+from app.services.conversation_intent import is_carryover_intent
+from app.services.query_expander import expand_search_queries
 from app.services.repo_reader import RepoReader
+from app.services.source_reader import read_source
 from app.services.web_search import search_web
 
 
@@ -45,6 +48,8 @@ class RoleRouter:
         preferred_role: str | None = None,
         allow_web: bool = False,
         web_queries: list[str] | None = None,
+        conversation_id: str | None = None,
+        read_sources: bool = False,
     ) -> dict[str, Any]:
         role_id = preferred_role or TASK_ROLE_MAP.get(task_type)
         if not role_id or role_id not in self.roles:
@@ -52,11 +57,24 @@ class RoleRouter:
         preflight = canonical_preflight(self.reader)
         selected_queries: list[str] = []
         web_results: list[dict[str, Any]] = []
+        source_readings: list[dict[str, Any]] = []
         web_warnings: list[str] = []
-        if allow_web and role_id not in WEB_ENABLED_ROLE_IDS:
+        carryover_intent = is_carryover_intent(user_input)
+        carryover_context = _load_carryover_context(conversation_id)
+        context_used = bool(carryover_intent and carryover_context)
+        inherited_sources_count = _count_inherited_sources(carryover_context)
+        if carryover_intent and not carryover_context:
+            web_warnings.append("当前请求引用了上一轮结果，但系统没有找到可继承上下文。请在同一对话中继续，或粘贴上一轮候选来源。")
+        elif allow_web and role_id not in WEB_ENABLED_ROLE_IDS:
             web_warnings.append(f"{role_id} 不允许联网；已忽略 allow_web=true。")
-        elif allow_web:
-            selected_queries = _select_web_queries(web_queries, user_input)
+        elif allow_web and not carryover_intent:
+            selected_queries = expand_search_queries(
+                role_id=role_id,
+                task_type=task_type,
+                user_input=user_input,
+                explicit_queries=web_queries,
+                limit=5,
+            )
             for query in selected_queries:
                 try:
                     response = search_web(query=query, limit=5, settings=self.settings)
@@ -66,14 +84,24 @@ class RoleRouter:
                         web_results.append(enriched)
                 except Exception as exc:
                     web_warnings.append(f"搜索失败：{query}；{exc}")
+            if read_sources and role_id == "deep_researcher_role":
+                source_readings = _read_top_sources(web_results, web_warnings)
         context = RoleContext(
             reader=self.reader,
             preflight=preflight,
             task_type=task_type,
             allow_web=allow_web,
             web_queries=selected_queries,
+            expanded_queries=selected_queries,
             web_results=web_results,
             web_warnings=web_warnings,
+            read_sources=read_sources,
+            source_readings=source_readings,
+            carryover_intent=carryover_intent,
+            carryover_context=carryover_context,
+            context_used=context_used,
+            inherited_sources_count=inherited_sources_count if context_used else 0,
+            new_web_search_performed=bool(web_results),
         )
         role = self.roles[role_id]
         result = role.run(user_input, notes, context)
@@ -81,6 +109,7 @@ class RoleRouter:
         result["status"] = "ok"
         if web_warnings and not result.get("warnings"):
             result["warnings"] = web_warnings
+        result["expanded_queries"] = selected_queries
         run_record = create_internal_role_run(
             {
                 "role_id": result["role_id"],
@@ -155,6 +184,24 @@ def list_internal_role_runs(limit: int = 10) -> list[dict[str, Any]]:
             return [_normalize_role_run(row) for row in cursor.fetchall()]
 
 
+def get_internal_role_run(run_id: int) -> dict[str, Any] | None:
+    ensure_schema()
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT id, created_at, role_id, role_name, task_type, input_summary,
+                       read_files_json, structured_output_json, conclusion, risks_json,
+                       minimal_next_step, answer_markdown, should_ingest, ingested, notes
+                FROM internal_role_runs
+                WHERE id = %s;
+                """,
+                (run_id,),
+            )
+            row = cursor.fetchone()
+            return _normalize_role_run(row) if row else None
+
+
 def _normalize_role_run(row: dict[str, Any]) -> dict[str, Any]:
     result = dict(row)
     result["read_files"] = result.pop("read_files_json") or []
@@ -168,8 +215,38 @@ def _summary(value: str) -> str:
     return compact[:500]
 
 
-def _select_web_queries(web_queries: list[str] | None, user_input: str) -> list[str]:
-    queries = [item.strip() for item in (web_queries or []) if item and item.strip()]
-    if not queries:
-        queries = [_summary(user_input)]
-    return queries[:5]
+def _load_carryover_context(conversation_id: str | None) -> dict[str, Any] | None:
+    if not conversation_id:
+        return None
+    try:
+        run_id = int(str(conversation_id).strip())
+    except ValueError:
+        return None
+    return get_internal_role_run(run_id)
+
+
+def _count_inherited_sources(context: dict[str, Any] | None) -> int:
+    if not context:
+        return 0
+    structured = context.get("structured_output") or {}
+    evidence = structured.get("evidence_ledger") or []
+    return len(evidence) if isinstance(evidence, list) else 0
+
+
+def _read_top_sources(web_results: list[dict[str, Any]], warnings: list[str]) -> list[dict[str, Any]]:
+    readings: list[dict[str, Any]] = []
+    for source_type in ["official", "app_store", "company_profile"]:
+        item = next((result for result in web_results if result.get("source_type") == source_type), None)
+        if not item:
+            continue
+        try:
+            readings.append(
+                read_source(
+                    url=str(item.get("url") or ""),
+                    source_type=source_type,
+                    max_chars=12000,
+                )
+            )
+        except Exception as exc:
+            warnings.append(f"来源正文读取失败：{item.get('url')}；{exc}")
+    return readings

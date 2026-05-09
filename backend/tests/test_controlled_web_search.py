@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from app.config import CANONICAL_FILES
 from app.config import Settings
+from app.config import get_settings
 from app.main import app
 from app.services.evidence_classifier import candidate_level_for_source
 from app.services.web_search import search_web
@@ -13,7 +14,11 @@ client = TestClient(app)
 
 
 def test_web_search_mock_provider_returns_results() -> None:
-    response = client.post("/web/search", json={"query": "Luffu pricing founder quote", "limit": 5})
+    app.dependency_overrides[get_settings] = lambda: Settings(web_search_provider="mock", tavily_api_key="")
+    try:
+        response = client.post("/web/search", json={"query": "Luffu pricing founder quote", "limit": 5})
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
 
     assert response.status_code == 200
     payload = response.json()
@@ -50,6 +55,7 @@ def test_tavily_provider_is_used_when_key_exists(monkeypatch) -> None:
                 url="https://example.gov/product",
                 snippet="official candidate",
                 source_type="official",
+                source_reason="domain matches product official site",
                 fetched_at=fetched_now(),
                 provider="tavily",
             )
@@ -97,6 +103,7 @@ def test_allow_web_true_deep_research_calls_web_search(monkeypatch) -> None:
                     "url": "https://example.com/community",
                     "snippet": "candidate",
                     "source_type": "community",
+                    "source_reason": "community discussion",
                     "fetched_at": "2026-05-08T12:00:00+08:00",
                     "provider": "test",
                 }
@@ -118,12 +125,42 @@ def test_allow_web_true_deep_research_calls_web_search(monkeypatch) -> None:
     payload = response.json()
     assert calls == ["Example Product official pricing"]
     assert payload["web_used"] is True
+    assert payload["expanded_queries"] == ["Example Product official pricing"]
     assert payload["web_results_count"] == 1
     assert payload["evidence_ledger"][0]["source_url"] == "https://example.com/community"
     assert "human_readable_markdown" in payload
     assert "当前判断" in payload["human_readable_markdown"]
     assert "Community result" in payload["human_readable_markdown"]
     assert "{'claim'" not in payload["human_readable_markdown"]
+
+
+def test_deep_research_auto_expands_queries_when_user_does_not_provide_queries(monkeypatch) -> None:
+    calls: list[str] = []
+
+    def fake_search_web(query: str, limit: int, settings):
+        calls.append(query)
+        return {"query": query, "provider": "test", "results": []}
+
+    monkeypatch.setattr("app.roles.role_router.search_web", fake_search_web)
+    response = client.post(
+        "/roles/run",
+        json={
+            "task_type": "deep_research",
+            "input": "hippocratic",
+            "allow_web": True,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["expanded_queries"] == [
+        "Hippocratic AI",
+        "Hippocratic AI startup",
+        "Hippocratic AI healthcare",
+        "Hippocratic AI founder",
+        "Hippocratic AI funding",
+    ]
+    assert calls == payload["expanded_queries"]
 
 
 def test_non_web_role_ignores_allow_web(monkeypatch) -> None:
