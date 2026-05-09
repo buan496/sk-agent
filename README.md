@@ -1,115 +1,112 @@
 # SK Agent 工作台
 
-新手先看：
+本项目是一个本地优先的 **SK 仓库 Agent 工作台**。
 
-- [SK Agent 工作台保姆级说明书](docs/beginner-manual.md)
-- [n8n 自动同步 SK 仓库](docs/n8n-sk-sync.md)
+它的第一原则不是聊天，而是：
 
-本项目是本地优先的 SK 仓库 Agent 工作台。当前只实现第 0 期和第 1 期，核心验证一句话：
+> 先读取 SK 仓库当前文件，明确读了什么，再输出判断、风险和入库稿。
 
-> SK Agent 能稳定读取 SK 仓库当前文件，并明确本次读到了什么。
+当前工作台已经具备：
 
-## 技术栈
+- 读取 SK 仓库 canonical files
+- 仓库文件浏览
+- Markdown 索引与检索
+- 状态漂移审计
+- 入库稿草案生成
+- 图谱查询
+- 内部角色系统
+- Tavily 联网搜索
+- Query Expansion
+- 来源分类
+- 来源正文读取
+- 多轮承接上下文
 
-- 后端：Python + FastAPI
-- 前端：Next.js + TypeScript + Tailwind
-- 数据库：PostgreSQL，第 2 期已接入
-- 向量检索：pgvector，第 3 期再接入；Docker 已使用 pgvector 镜像
-- 图数据库：不在当前阶段实现
-- 仓库读取：`LOCAL_REPO_PATH` 优先，GitHub raw/API 预留
+## 1. 快速启动
 
-## 目录
-
-```text
-sk-agent/
-├─ backend/
-│  ├─ app/
-│  │  ├─ main.py
-│  │  ├─ config.py
-│  │  ├─ services/repo_reader.py
-│  │  └─ api/repo.py
-│  ├─ tests/
-│  └─ requirements.txt
-├─ frontend/
-│  ├─ app/
-│  ├─ components/
-│  ├─ lib/
-│  └─ package.json
-├─ data/repo_cache/
-├─ docs/
-└─ .env.example
-```
-
-## 环境变量
-
-复制 `.env.example` 后按本机情况配置。第 1 期推荐只用本地仓库路径：
+在项目根目录运行：
 
 ```powershell
-$env:LOCAL_REPO_PATH="D:\path\to\your\sk-repo"
+cd d:\sk-anget-mvp\sk-agent
+docker compose up -d backend frontend
 ```
 
-如果使用 Docker Compose，只需要配置宿主机 SK 仓库路径：
+访问：
 
 ```text
-SK_REPO_PATH=D:/path/to/your/sk-repo
+前端：http://localhost:3000
+后端：http://localhost:8000/health
 ```
 
-如果 Docker Hub 拉取慢或不可访问，可以把基础镜像改成你本机可用的镜像源：
+局域网访问时，把 `localhost` 换成本机 IP，例如：
 
 ```text
-PYTHON_IMAGE=python:3.12-slim
-NODE_IMAGE=node:20-alpine
+http://192.168.1.9:3000
 ```
 
-当前 GitHub 联调配置示例：
+## 2. 环境变量
 
-```text
-LOCAL_REPO_PATH=
-GITHUB_REPO=MRYGP/SK
-GITHUB_BRANCH=main
-GITHUB_RAW_BASE_URL=https://raw.githubusercontent.com/MRYGP/SK/main
-```
+真实密钥只放 `.env`，不要提交。
 
-这个模式下，`/repo/files` 使用 GitHub API 列文件树，`/repo/file` 和 `/repo/canonical` 优先使用 GitHub raw 读取正文。
+`.env.example` 只是模板。
 
-## MiniMax 国内版模型配置
+常用配置：
 
-第 3 期开始使用 MiniMax 作为默认 LLM provider。真实 key 只放 `.env`，不要写入 README 或提交到 Git：
+```env
+SK_REPO_URL=https://github.com/MRYGP/SK.git
+SKGPT_REPO_URL=https://github.com/MRYGP/SKGPT.git
+LOCAL_REPO_PATH=/repo-cache/SK
+REPO_SYNC_URL=https://github.com/MRYGP/SK.git
+REPO_SYNC_PATH=/repo-cache/SK
 
-```text
 LLM_PROVIDER=minimax
 MINIMAX_API_KEY=
 MINIMAX_BASE_URL=https://api.minimax.io/v1
 MINIMAX_CHAT_ENDPOINT=/chat/completions
 MINIMAX_CHAT_MODEL=MiniMax-M2.7
-MINIMAX_TEMPERATURE=0.2
+
+WEB_SEARCH_PROVIDER=tavily
+TAVILY_API_KEY=
 ```
 
-如果你的 MiniMax 控制台给的是其他国内 endpoint，比如 `https://api.minimaxi.com/v1`，只改 `.env` 的 `MINIMAX_BASE_URL`，代码不用动。
-
-检查配置是否进容器：
+如果换了 `.env`，重启后端：
 
 ```powershell
-Invoke-RestMethod http://localhost:8000/llm/config
+docker compose up -d --force-recreate backend
 ```
 
-填入 `MINIMAX_API_KEY` 后，可用最小聊天接口联调：
+## 3. SK / SKGPT 双仓边界
 
-```powershell
-$body = @{
-  messages = @(@{ role = "user"; content = "用一句话介绍你自己" })
-} | ConvertTo-Json -Depth 5
+### SK 仓库
 
-Invoke-RestMethod -Method Post http://localhost:8000/llm/chat -ContentType "application/json" -Body $body
-```
+`MRYGP/SK`
 
-Compose 会把这个目录只读挂载到后端容器的 `/sk-repo`，后端容器内固定使用：
+用途：
 
-```text
-LOCAL_REPO_PATH=/sk-repo
-```
+- 内容
+- 案例
+- 状态
+- 方法论
+- 执行状态
 
-canonical 文件固定为：
+SK 是当前状态来源。
+
+### SKGPT 仓库
+
+`MRYGP/SKGPT`
+
+用途：
+
+- Project Instructions
+- GPTS 配置
+- 上传清单
+- 现读协议
+- 内部角色 prompt 来源
+
+SKGPT 不是 SK 当前状态来源。
+
+## 4. Canonical Files
+
+回答型接口必须优先读取这 4 个文件：
 
 ```text
 README.md
@@ -118,73 +115,15 @@ cases/2026/case-index.md
 cases/2026/case-cards.md
 ```
 
-如果文件本次未读取到，API 返回 `status: not_found`，并提示“本次未读取到，文件未读取到不等于文件不存在”。
-
-## 启动后端
-
-推荐使用 Docker：
-
-```powershell
-cd sk-agent
-Copy-Item .env.example .env
-# 编辑 .env，把 SK_REPO_PATH 改成本机 SK 仓库路径
-docker compose up --build
-```
-
-访问：
+如果本次没读到，只能说：
 
 ```text
-后端：http://localhost:8000/health
-前端：http://localhost:3000
-数据库：localhost:5432
+本次未读取到
 ```
 
-也可以只启动后端：
+不能推断文件不存在。
 
-```powershell
-cd sk-agent
-docker compose up --build backend
-```
-
-本机 Python 方式仍保留，方便不用 Docker 时调试：
-
-```powershell
-cd sk-agent\backend
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-$env:LOCAL_REPO_PATH="D:\path\to\your\sk-repo"
-uvicorn app.main:app --reload --port 8000
-```
-
-健康检查：
-
-```powershell
-Invoke-RestMethod http://localhost:8000/health
-```
-
-读取 canonical：
-
-```powershell
-Invoke-RestMethod http://localhost:8000/repo/canonical
-```
-
-## 启动前端
-
-Docker Compose 已经包含前端服务。单独启动：
-
-```powershell
-cd sk-agent
-docker compose up --build frontend
-```
-
-本机 Node.js 方式：
-
-```powershell
-cd sk-agent\frontend
-npm install
-npm run dev
-```
+## 5. 前端怎么用
 
 打开：
 
@@ -192,270 +131,285 @@ npm run dev
 http://localhost:3000
 ```
 
-前端默认读取：
+页面入口：
+
+- **状态**：查看后端健康、canonical 文件读取状态、手动拉取 SK 仓库
+- **文件**：浏览和阅读 SK 仓库文件
+- **检索**：搜索知识库，并可点击阅读命中文件
+- **审计**：运行状态漂移审计
+- **Agent**：运行产品初拆、框架红队、文章发布检查
+- **入库稿**：生成可审核 patch draft
+- **图谱**：查询案例、框架、产品、理论关系
+- **Memory / 内部角色**：运行内部角色、联网补证据、读取来源正文
+
+## 6. 内部角色
+
+内部角色入口在前端 **Memory / 内部角色**。
+
+当前角色：
+
+- 深度研究员
+- 写作工坊
+- 第一读者
+- 产品初拆
+- 仓库治理
+- 文章发布检查
+- 入库稿生成器
+
+联网只允许：
+
+- `deep_researcher_role`
+- `product_teardown_role`
+- `article_publish_check_role`
+
+其他角色即使勾选联网，也只会返回 warning。
+
+## 7. 联网搜索
+
+当前使用 Tavily。
+
+后端接口：
 
 ```text
-http://localhost:8000
-```
-
-如需改后端地址：
-
-```powershell
-$env:NEXT_PUBLIC_API_BASE_URL="http://localhost:8000"
-```
-
-## 测试
-
-推荐使用 Docker：
-
-```powershell
-cd sk-agent
-docker compose run --rm backend pytest
-```
-
-前端构建检查：
-
-```powershell
-cd sk-agent
-docker compose run --rm frontend npm run build
-```
-
-本机 Python：
-
-```powershell
-cd sk-agent\backend
-python -m pytest
-```
-
-当前测试覆盖：
-
-- `/health` 返回 `{"status": "ok"}`
-- 本地读取单个文件
-- 缺失文件返回 `not_found`
-- 文件树跳过 `.git`
-- Markdown 按标题切块
-
-## 索引 API
-
-第 2 期提供：
-
-```text
-POST /index/rebuild
-GET /index/status
-GET /index/chunks?file_path=README.md
-```
-
-重建索引：
-
-```powershell
-Invoke-RestMethod -Method Post http://localhost:8000/index/rebuild
-```
-
-查看索引状态：
-
-```powershell
-Invoke-RestMethod http://localhost:8000/index/status
-```
-
-## 检索与问答 API
-
-第 3 期当前完成了关键词检索和 MiniMax 最小问答：
-
-```text
-POST /search
-POST /ask
-```
-
-关键词检索：
-
-```powershell
-$body = @{ query = "MTP 构思招募法在哪"; limit = 5 } | ConvertTo-Json
-Invoke-RestMethod -Method Post http://localhost:8000/search -ContentType "application/json" -Body $body
-```
-
-问答：
-
-```powershell
-$body = @{ question = "MTP 构思招募法在哪？"; limit = 6 } | ConvertTo-Json
-Invoke-RestMethod -Method Post http://localhost:8000/ask -ContentType "application/json" -Body $body
-```
-
-当前 `/ask` 流程：
-
-```text
-问题 -> 关键词检索 chunks -> 重新读取命中文件元信息 -> MiniMax 生成答案 -> 返回已读取文件和引用
-```
-
-pgvector 语义检索尚未启用。当前没有 MiniMax embedding endpoint、embedding model、Group ID 信息时，系统会稳定运行在关键词检索模式。
-
-已压测的第 3 期问题：
-
-```text
-MTP 构思招募法在哪
-诊断空白四条件是什么
-case-card 格式在哪里
-产品评估决策清单有哪些必须条件
-```
-
-## 状态审计 API
-
-第 4 期提供规则版状态校准 Agent：
-
-```text
-POST /agents/status-audit
-```
-
-运行：
-
-```powershell
-Invoke-RestMethod -Method Post http://localhost:8000/agents/status-audit
-```
-
-当前审计固定读取：
-
-```text
-README.md
-ops/执行状态总表.md
-cases/2026/case-index.md
-cases/2026/case-cards.md
-```
-
-输出包含：
-
-```text
-结论
-已读取文件
-发现的冲突
-风险等级
-最小修复方案
-建议修改文件
-Cursor/Codex 执行指令
-```
-
-## 入库稿 API
-
-第 5 期提供只生成草稿、不写仓库的入库稿接口：
-
-```text
-POST /patch/draft
+POST /web/search
 ```
 
 示例：
 
-```powershell
-$body = @{
-  target_file = "cases/2026/example.md"
-  intent = "新增轻量初拆文档"
-  new_content = "# Example`n`n正文内容"
-  operation = "auto"
-} | ConvertTo-Json
-
-Invoke-RestMethod -Method Post http://localhost:8000/patch/draft -ContentType "application/json" -Body $body
+```json
+{
+  "query": "myhair.ai official",
+  "limit": 5
+}
 ```
 
-接口会先读取目标文件，返回已读取文件、建议保存路径、Markdown 正文、diff 预览、commit message、PR title、PR body 和风险提示。`operation=auto` 时，目标文件本次读取成功则生成追加草稿，未读取到则生成新增文件草稿。
+搜索结果包含：
 
-## SK 专用 Agent API
+- title
+- url
+- snippet
+- source_type
+- source_reason
+- fetched_at
+- provider
 
-第 6 期提供三个工作流接口：
+如果 Tavily 失败，会自动 fallback 到 mock provider。
+
+## 8. Query Expansion
+
+如果用户没有手填搜索词，系统会自动扩展。
+
+例：
+
+输入：
 
 ```text
+hippocratic
+```
+
+深度研究员会实际搜索：
+
+```text
+Hippocratic AI
+Hippocratic AI startup
+Hippocratic AI healthcare
+Hippocratic AI founder
+Hippocratic AI funding
+```
+
+如果用户手动填写 `web_queries`，系统优先使用用户输入，不自动扩展。
+
+## 9. 来源分类
+
+搜索结果会被分类为：
+
+- `official`
+- `app_store`
+- `company_profile`
+- `media`
+- `community`
+- `unknown`
+
+证据等级只作为候选：
+
+- `official` -> `A_candidate`
+- `app_store` -> `B_candidate`
+- `company_profile` -> `B_candidate`
+- `media` -> `B_candidate`
+- `community` -> `C_candidate`
+- `unknown` -> `X_candidate`
+
+候选等级不等于最终事实等级。
+
+## 10. 来源正文读取
+
+后端接口：
+
+```text
+POST /web/read-source
+```
+
+示例：
+
+```json
+{
+  "url": "https://www.myhair.ai/",
+  "source_type": "official"
+}
+```
+
+返回：
+
+- title
+- clean_text
+- metadata
+- extracted_facts
+- candidate_claims
+- source_quotes
+
+前端中，在内部角色运行结果的候选来源下，可以点击：
+
+```text
+读取正文
+```
+
+支持：
+
+- official
+- app_store
+- company_profile
+- media
+
+暂不支持：
+
+- PDF
+- 视频
+- 音频
+- XML feed
+
+## 11. 多轮承接上下文
+
+如果用户在同一个前端页面里先跑一轮联网研究，再输入：
+
+```text
+基于以上候选来源，整理 MYHAIR AI 的产品功能、证据缺口、下一步研究问题
+```
+
+系统会识别为承接型指令：
+
+- 不重新搜索
+- 不重新生成 query
+- 继承上一轮 evidence_ledger
+- 基于上一轮候选来源整理报告
+
+前端会显示：
+
+- 是否使用上一轮上下文
+- 是否重新联网
+- 继承来源数量
+
+## 12. 常用后端 API
+
+```text
+GET  /health
+GET  /repo/files
+GET  /repo/file?path=
+GET  /repo/canonical
+POST /repo/sync
+
+POST /index/rebuild
+GET  /index/status
+GET  /index/chunks?file_path=
+
+POST /search
+POST /ask
+
+POST /agents/status-audit
 POST /agents/product-teardown
 POST /agents/framework-red-team
 POST /agents/article-publish-check
-```
 
-产品轻量初拆：
+POST /patch/draft
 
-```powershell
-$body = @{
-  product_name = "Example Product"
-  notes = "可选补充信息"
-  limit = 8
-} | ConvertTo-Json
-
-Invoke-RestMethod -Method Post http://localhost:8000/agents/product-teardown -ContentType "application/json" -Body $body
-```
-
-框架红队：
-
-```powershell
-$body = @{
-  idea = "一个 AI 产品方向"
-  notes = "可选补充信息"
-  limit = 8
-} | ConvertTo-Json
-
-Invoke-RestMethod -Method Post http://localhost:8000/agents/framework-red-team -ContentType "application/json" -Body $body
-```
-
-文章发布检查：
-
-```powershell
-$body = @{
-  final_article = "# 标题`n`n文章终稿正文"
-  notes = "可选补充信息"
-  limit = 8
-} | ConvertTo-Json
-
-Invoke-RestMethod -Method Post http://localhost:8000/agents/article-publish-check -ContentType "application/json" -Body $body
-```
-
-这些接口都会返回 `read_files`。MiniMax 可用时返回模型生成结果；MiniMax 不可用时返回规则版骨架，并在 `llm.status` 标记为 `unavailable`。
-
-## 前端工作台
-
-第 7 期把主要后端能力接入到首页工作台：
-
-```text
-http://localhost:3000
-```
-
-当前页面包含：
-
-- 状态：查看 backend、canonical 文件读取、运行状态审计
-- 文件：读取文件树并预览文件正文
-- 检索：运行 `/search` 和 `/ask`
-- 审计：查看状态漂移结果
-- Agent：运行产品轻量初拆、框架红队、文章发布检查
-- 入库稿：调用 `/patch/draft` 查看草稿和 diff preview
-
-## 图数据库 API
-
-第 8 期接入 Neo4j，并从 PostgreSQL 索引 chunks 重建基础图谱：
-
-```text
+GET  /graph/status
 POST /graph/rebuild
-GET /graph/status
-GET /graph/failure-modes/{code}/cases
-GET /graph/frameworks/articles?framework=诊断空白
-GET /graph/products/tools
-GET /graph/theories/reused?min_cases=2
+GET  /graph/failure-modes/{code}/cases
+GET  /graph/frameworks/articles?framework=
+GET  /graph/products/tools
+GET  /graph/theories/reused
+
+GET  /roles
+POST /roles/run
+GET  /roles/runs?limit=10
+
+POST /web/search
+POST /web/read-source
+
+GET  /skgpt/files
+GET  /skgpt/file?path=
+GET  /skgpt/role-prompts
 ```
 
-启动 Neo4j 与后端：
+## 13. 测试
+
+后端：
 
 ```powershell
-docker compose up -d --build backend
+docker compose run --rm backend pytest
 ```
 
-重建图谱：
+前端：
 
 ```powershell
-Invoke-RestMethod -Method Post http://localhost:8000/graph/rebuild
-Invoke-RestMethod http://localhost:8000/graph/status
+docker compose run --rm frontend npm run build
 ```
 
-Neo4j Browser：
+当前最后一次验证：
 
 ```text
-http://localhost:7474
+后端：75 passed
+前端：next build passed
 ```
 
-## 当前不做
+## 14. 重要文档
 
-- 不做自动 GitHub 写入
-- 不做复杂 LLM Agent
-- 不做 pgvector 语义检索
+- `docs/beginner-manual.md`：新手说明书
+- `docs/architecture.md`：架构说明
+- `docs/phase-checklist.md`：阶段完成清单
+- `docs/internal-role-system.md`：内部角色系统
+- `docs/phase-9-3-controlled-web-search.md`：可控联网
+- `docs/phase-9-3c-query-expansion.md`：搜索词扩展
+- `docs/phase-9-3d-source-classifier.md`：来源分类
+- `docs/phase-9-3e-conversation-carryover.md`：上下文承接
+- `docs/phase-9-4-source-reader.md`：来源正文读取
+- `docs/phase-8-audit.md`：Phase 8 后验收审计
 
-这些都留到后续阶段，先保证仓库读取可靠。
+## 15. 安全边界
+
+当前系统不会：
+
+- 自动写 SK 仓库
+- 自动 commit
+- 自动 push
+- 自动创建 PR
+- 自动入库
+- 自动修改案例卡
+- 让联网结果覆盖 canonical files
+- 把外部搜索结果当成最终事实
+
+所有联网搜索、来源正文、图谱、memory、历史运行记录，都只是辅助层。
+
+最终状态仍以 SK canonical files 为准。
+
+## 16. 交接建议
+
+交接时优先检查：
+
+1. `.env` 是否有 `TAVILY_API_KEY`
+2. `docker compose ps` 是否 backend / frontend / db / neo4j 正常
+3. `http://localhost:3000` 是否能打开
+4. `http://localhost:8000/health` 是否返回 ok
+5. 前端“状态”页 canonical files 是否读取正常
+6. 前端“Memory / 内部角色”能否运行深度研究
+7. 勾选联网后是否返回 Tavily 来源
+8. 点击“读取正文”是否能读取 official 来源正文
