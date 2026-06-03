@@ -4,12 +4,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.agents import router as agents_router
+from app.api.cognitive import router as cognitive_router
 from app.api.graph import router as graph_router
 from app.api.index import router as index_router
 from app.api.llm import router as llm_router
 from app.api.memory import router as memory_router
 from app.api.patch import router as patch_router
 from app.api.repo import router as repo_router
+from app.api.research import router as research_router
 from app.api.roles import router as roles_router
 from app.api.search import router as search_router
 from app.api.skgpt import router as skgpt_router
@@ -49,3 +51,5 @@ app.include_router(memory_router)
 app.include_router(roles_router)
 app.include_router(skgpt_router)
 app.include_router(web_router)
+app.include_router(research_router)
+app.include_router(cognitive_router)

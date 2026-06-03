@@ -524,3 +524,59 @@
 验收：
 - [x] 后端 Docker 测试通过：`75 passed`
 - [x] 前端 Docker 构建通过：`docker compose run --rm frontend npm run build`
+## Phase 10: Research State Engine
+
+Status: first backend version complete.
+
+- [x] Add `research_objects` table
+- [x] Add `research_sources` table
+- [x] Add `research_facts` table
+- [x] Add `backend/app/services/research_state.py`
+- [x] Add `POST /research/objects`
+- [x] Add `GET /research/objects?limit=50`
+- [x] Add `GET /research/objects/{slug}/state`
+- [x] Add `POST /research/objects/{slug}/sources`
+- [x] Add `POST /research/objects/{slug}/read-source`
+- [x] Add `POST /research/objects/{slug}/ingest-role-run`
+- [x] Support candidate source accumulation
+- [x] Support source_reader -> extracted candidate facts
+- [x] Support internal_role_runs -> research state ingestion
+- [x] Keep research state advisory only
+- [x] Do not write SK repository
+- [x] Do not auto commit / push / PR
+- [x] Add `docs/phase-10-research-state-engine.md`
+
+Acceptance:
+- [x] Backend tests pass after Phase 10 changes: `79 passed`
+- [x] Docker backend restarted after schema update
+
+## Phase 11: Cognitive Flow OS
+
+Status: first full-stack version complete.
+
+- [x] Add `backend/app/cognitive/cognitive_session.py`
+- [x] Add `backend/app/cognitive/thought_tracker.py`
+- [x] Add `backend/app/cognitive/context_manager.py`
+- [x] Add `backend/app/cognitive/entity_memory.py`
+- [x] Add `backend/app/cognitive/judgment_state.py`
+- [x] Add `cognitive_sessions` table
+- [x] Add `cognitive_entities` table
+- [x] Add `cognitive_messages` table
+- [x] Add `cognitive_judgments` table
+- [x] Add `POST /cognitive/think`
+- [x] Add `GET /cognitive/sessions?limit=20`
+- [x] Add `GET /cognitive/sessions/{session_id}/state`
+- [x] Auto-detect entities from user thought
+- [x] Auto-create or connect research object
+- [x] Keep thought continuity inside cognitive session
+- [x] Record judgment evolution
+- [x] Use internal roles as optional operators
+- [x] Replace frontend default entry with cognitive workbench
+- [x] Add `docs/cognitive-flow-os.md`
+- [x] Do not write SK repository
+- [x] Do not auto commit / push / PR
+
+Acceptance:
+- [x] Backend tests pass after Phase 11 changes: `84 passed`
+- [x] Frontend build passes after Phase 11 changes: `next build passed`
+- [x] Docker backend/frontend restarted
